@@ -1,0 +1,14 @@
+name: PoppyLobby
+version: 0.1.0
+main: com.poppy.lobby.PoppyLobbyPlugin
+load: STARTUP
+description: Protected standalone lobby and practice server selector.
+author: Poppy
+commands:
+  hub:
+    description: Return to the network lobby.
+    usage: /hub
+permissions:
+  poppylobby.build:
+    description: Allows /lobbybuild to enable editing of the lobby.
+    default: op

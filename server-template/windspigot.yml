@@ -1,0 +1,9 @@
+# WindSpigot 2.1.3 expands this file with its remaining defaults on first start.
+config-version: 28
+settings:
+  # Maximum no-damage ticks. 20 is vanilla; 0 disables hit invulnerability.
+  hit-delay: 18
+  # PoppyPractice applies separate X/Y multipliers for Speed II and no-Speed profiles.
+  potion-speed-offset: 0.0
+  smooth-potting: true
+  lag-compensated-potions: true

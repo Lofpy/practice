@@ -1,0 +1,10 @@
+# false = only /hub proxy transfer; does not modify gameplay or worlds.
+lobby-server: true
+# Proxy backend name for /hub when this plugin runs on the PvP backend.
+hub-server: lobby
+# Must match level-name in the lobby backend's server.properties.
+world-name: lobby
+# Must match the proxy's backend server name, not its public address.
+practice-server: pvp
+scoreboard-title: '&d&lPoppy Network'
+welcome-message: '&dPoppy Network &7へようこそ！ &fコンパスから PvP に参加できます。'

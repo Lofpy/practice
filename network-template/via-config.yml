@@ -1,0 +1,5 @@
+# Version translation runs on each backend, never simultaneously on the proxy.
+check-for-updates: false
+# Keep modern clients' combat controls compatible with the 1.8.8 backend.
+shield-blocking: true
+show-shield-when-sword-in-hand: true

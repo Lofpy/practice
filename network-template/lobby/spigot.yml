@@ -1,0 +1,10 @@
+config-version: 8
+settings:
+  bungeecord: true
+  restart-on-crash: false
+  log-villager-deaths: false
+world-settings:
+  default:
+    verbose: false
+    anti-xray:
+      enabled: false

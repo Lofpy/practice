@@ -1,0 +1,12 @@
+settings:
+  allow-end: false
+  query-plugins: false
+  shutdown-message: Lobby restarting. Please reconnect.
+spawn-limits:
+  monsters: 0
+  animals: 0
+  water-animals: 0
+  ambient: 0
+worlds:
+  lobby:
+    generator: PoppyLobby

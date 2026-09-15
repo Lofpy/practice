@@ -1,0 +1,272 @@
+lobby:
+  world: practice
+  x: 0.5
+  y: 4.0
+  z: 100.5
+  yaw: 180.0
+  pitch: 0.0
+
+match:
+  countdown-seconds: 5
+  ender-pearl-cooldown-seconds: 16
+
+# Combo PvP/Bot only. This does not modify WindSpigot's global/current KB profile.
+# /combokb changes also apply to active matches. Original settings are restored on leave.
+# Combo pearls always have an independent 8-second cooldown.
+combo:
+  # Equal-strength hits can register again after this many ticks (0..100).
+  # Internally Bukkit maximumNoDamageTicks is set to twice this value.
+  no-damage-ticks: 2
+  knockback:
+    stop-sprint: true
+    # At this rise above the last grounded position, suppress upward KB until landing.
+    # Horizontal KB and hit damage are unchanged. 0 disables this rule (range: 0..50 blocks).
+    fall-height: 3.0
+    # Constant descent after fall-height, without gravity acceleration (blocks/tick).
+    # Smaller is slower: 0.08 is about 1.6 blocks/s at 20 TPS. Range: 0.04..0.5.
+    # The minimum avoids native floating detection without granting flight permission.
+    fall-speed: 0.08
+    friction-horizontal: 2.0
+    friction-vertical: 2.0
+    horizontal: 0.30
+    vertical: 0.10
+    vertical-min: -1.0
+    vertical-max: 0.15
+    extra-horizontal: 0.10
+    extra-vertical: 0.0
+    wtap-extra-horizontal: 0.10
+    wtap-extra-vertical: 0.0
+    add-horizontal: 0.0
+    add-vertical: 0.0
+    projectiles:
+      rod:
+        horizontal: 0.4
+        vertical: 0.4
+      arrow:
+        horizontal: 0.4
+        vertical: 0.4
+      pearl:
+        horizontal: 0.4
+        vertical: 0.4
+      snowball:
+        horizontal: 0.4
+        vertical: 0.4
+      egg:
+        horizontal: 0.4
+        vertical: 0.4
+
+debug:
+  damage-chat: false
+
+hit-debug-room:
+  attack-bot:
+    range: 3.0
+    interval-ticks: 10
+  pearl-bot:
+    # 60 ticks = approximately 3 seconds.
+    cooldown-ticks: 60
+
+# Protocol 5/47 chattering knockback normalizer. The default CHATTER_ONLY mode
+# corrects confirmed chattering while preserving normal attack slowdown.
+chatter-kb:
+  mode: CHATTER_ONLY
+  target:
+    # Minecraft 1.7.10 = 5, Minecraft 1.8.x = 47
+    protocols:
+      - 5
+      - 47
+    require-combat-correlation: true
+  detection:
+    history-ms: 3000
+    same-frame-gap-ms:
+      strong: 5
+      medium: 12
+      weak: 20
+    boundary-gap-ms:
+      strong: 8
+      weak: 12
+    boundary-detection:
+      enabled: true
+      require-armed: true
+    activation:
+      score: 5.5
+      min-bursts: 2
+      window-ms: 2000
+    deactivation:
+      score: 2.0
+      no-burst-ms: 5000
+    score-decay-per-second: 1.0
+    network-batch-penalty: 0.5
+    cancel-confirmed-duplicate-hits: true
+  compensation:
+    max-client-frames: 4
+    max-window-ms: 250
+    min-horizontal-velocity: 0.08
+    correction-scale: 0.96
+    max-corrections-per-window: 2
+    min-correction-gap-ms: 40
+    max-direction-deviation-degrees: 35.0
+    ping-projection: true
+    max-ping-ms: 220
+    require-slowdown-eligible: true
+    knockback-enchant-support: false
+  physics:
+    air-horizontal-drag: 0.91
+    default-ground-slipperiness: 0.60
+    gravity: 0.08
+    vertical-drag: 0.98
+    observation-blend-alpha: 0.35
+  safety:
+    min-tps: 18.0
+    disable-on-teleport: true
+    disable-on-unsupported-protocol: true
+    skip-on-position-discontinuity: true
+  logging:
+    enabled: true
+    include-attack-samples: false
+    include-corrections: true
+    debug-ring-size: 256
+    async-queue-size: 4096
+    rotate-mb: 32
+    retain-files: 7
+
+# Player-vs-player melee reach validation. OBSERVE is the default: detect and
+# log only, without cancelling attacks. Enforcement requires PROTECT or STRICT.
+reachguard:
+  mode: OBSERVE
+  compatibility:
+    # Swappable PacketBridge implementation. This build uses WindSpigot's
+    # decoded 1.8 NMS packets after ProtocolSupport translation. Protocol 5
+    # (1.7.10) and Protocol 47 (1.8.x) both enforce PROTECT/STRICT decisions.
+    packet-library: NMS_DIRECT
+  reach:
+    # Raw eye-to-player-AABB distance. All limits are inclusive, so a
+    # measured distance of exactly 3.00 is blocked in PROTECT/STRICT.
+    base-reach: 3.00
+    client-hitbox-expansion: 0.00
+    geometry-epsilon: 0.000
+    flag-threshold: 3.00
+    protect:
+      high-confidence-cancel: 3.00
+      medium-confidence-cancel: 3.00
+    strict:
+      high-confidence-cancel: 3.00
+      medium-confidence-cancel: 3.00
+  tracking:
+    attacker-history-size: 10
+    target-history-size: 8
+    max-targets-per-viewer: 64
+    history-retention-ms: 1000
+    spawn-grace-ticks: 5
+    teleport-grace-ticks: 5
+    respawn-grace-ticks: 10
+    world-change-grace-ticks: 10
+  lag-compensation:
+    sync-interval-ticks: 1
+    max-rewind-ms: 300
+    stale-movement-distance: 0.60
+    extreme-ping-observe-threshold: 350
+    maximum-jitter-ms: 100
+  server-health:
+    minimum-tps-for-strict: 18.0
+    maximum-tick-time-ms: 250
+    low-tps-action: OBSERVE
+  damage-event-guard:
+    enabled: true
+    cancel-without-permit: true
+    permit-expire-ms: 150
+  violation:
+    base: 1.0
+    excess-multiplier: 10.0
+    max-excess-addition: 4.0
+    decay-per-second: 0.20
+    alert-vl: 3.0
+    detailed-alert-vl: 8.0
+    kick-vl: 15.0
+  punishment:
+    kick-enabled: false
+    kick-command: "kick %player% Unfair advantage detected"
+  alerts:
+    enabled: true
+    cooldown-ms: 500
+    minimum-vl: 3.0
+  logging:
+    enabled: true
+    retention-days: 30
+    async-queue-size: 8192
+  debug:
+    enabled: false
+    target-player: ""
+    # OBSERVE always records every PvP decision. This additionally records
+    # valid ALLOW decisions while PROTECT or STRICT is active.
+    log-valid-attacks: false
+
+bot:
+  # These values are edited from the Bot Settings GUI.
+  # Defaults match the former Hard bot behavior.
+  copy-player-skin: true
+  maximum-health: 20.0
+  movement:
+    # Disabling strafe keeps the saved strength/timers for when it is re-enabled.
+    strafe-enabled: true
+    preferred-distance: 2.65
+    retreat-distance: 1.55
+    strafe-input: 0.828
+    strafe-switch-minimum-ticks: 11
+    strafe-switch-maximum-ticks: 20
+  aim:
+    maximum-yaw-change-per-tick: 43.2
+    maximum-pitch-change-per-tick: 32.4
+    prediction-ticks: 1.0
+    error-degrees: 0.14
+  combat:
+    swing-lead-distance: 1.0
+    attack-range: 3.0
+    minimum-cps: 16.8
+    maximum-cps: 19.2
+    sprint-reset-ticks: 1
+  healing:
+    enabled: true
+    health-threshold: 12.0
+    cooldown-ticks: 18
+    potion-count: 29
+    double-potion-health-threshold: 6.0
+    emergency-unanswered-hits: 2
+    emergency-retreat-before-throw-ticks: 0
+    retreat-before-throw-ticks: 0
+    can-heal-opponent: false
+
+# Splash potion trajectory. x-speed controls both horizontal (X/Z)
+# velocity components; y-speed controls the vertical component.
+# Each trajectory value can be tuned independently for players with Speed II
+# (or higher) and players without it. A speed value of 1.0 keeps the vanilla
+# launch speed. A self-collision delay of 0 allows a collision with the thrower
+# on the next server tick; 4 is vanilla. Spawn offsets are limited to -2.0..2.0.
+# The vanilla projectile hitbox is 0.25.
+splash-potion:
+  without-speed:
+    hitbox-size: 1.0
+    x-speed: 1.0
+    y-speed: 1.0
+    spawn-forward-offset: 0.0
+    spawn-height-offset: 0.0
+    self-collision-delay-ticks: 0
+  with-speed-ii:
+    hitbox-size: 1.0
+    x-speed: 1.0
+    y-speed: 1.0
+    spawn-forward-offset: 0.0
+    spawn-height-offset: 0.0
+    self-collision-delay-ticks: 0
+
+messages:
+  prefix: "&8[&cPractice&8] &r"
+  no-kit-selected: "&cSelect a kit first."
+  kit-selected: "&aSelected &f{kit}&a."
+  joined-queue: "&aJoined the &f{kit}&a queue."
+  left-queue: "&eYou left the queue."
+  not-queued: "&cYou are not queued."
+  already-queued: "&cYou are already queued."
+  queue-not-allowed: "&cYou cannot join a queue right now."
+  no-arena: "&eNo arena is currently available. You will remain queued."
+  spawn-not-allowed: "&cYou cannot return to spawn during a match."

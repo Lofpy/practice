@@ -1,0 +1,180 @@
+arenas:
+  nodebuff_01:
+    enabled: true
+    kits: [nodebuff, boxing, combo]
+    first-spawn:
+      world: practice
+      x: 999.5
+      y: 4.0
+      z: -55.5
+      yaw: 0.0
+      pitch: 0.0
+    second-spawn:
+      world: practice
+      x: 999.5
+      y: 4.0
+      z: 55.5
+      yaw: 180.0
+      pitch: 0.0
+
+  nodebuff_02:
+    enabled: true
+    kits: [nodebuff, boxing, combo]
+    first-spawn:
+      world: practice
+      x: 1999.5
+      y: 4.0
+      z: -55.5
+      yaw: 0.0
+      pitch: 0.0
+    second-spawn:
+      world: practice
+      x: 1999.5
+      y: 4.0
+      z: 55.5
+      yaw: 180.0
+      pitch: 0.0
+
+  nodebuff_03:
+    enabled: true
+    kits: [nodebuff, boxing, combo]
+    first-spawn:
+      world: practice
+      x: 2999.5
+      y: 4.0
+      z: -55.5
+      yaw: 0.0
+      pitch: 0.0
+    second-spawn:
+      world: practice
+      x: 2999.5
+      y: 4.0
+      z: 55.5
+      yaw: 180.0
+      pitch: 0.0
+
+  nodebuff_04:
+    enabled: true
+    kits: [nodebuff, boxing, combo]
+    first-spawn:
+      world: practice
+      x: 3999.5
+      y: 4.0
+      z: -55.5
+      yaw: 0.0
+      pitch: 0.0
+    second-spawn:
+      world: practice
+      x: 3999.5
+      y: 4.0
+      z: 55.5
+      yaw: 180.0
+      pitch: 0.0
+
+  nodebuff_05:
+    enabled: true
+    kits: [nodebuff, boxing, combo]
+    first-spawn:
+      world: practice
+      x: 4999.5
+      y: 4.0
+      z: -55.5
+      yaw: 0.0
+      pitch: 0.0
+    second-spawn:
+      world: practice
+      x: 4999.5
+      y: 4.0
+      z: 55.5
+      yaw: 180.0
+      pitch: 0.0
+
+  nodebuff_06:
+    enabled: true
+    kits: [nodebuff, boxing, combo]
+    first-spawn:
+      world: practice
+      x: 5999.5
+      y: 4.0
+      z: -55.5
+      yaw: 0.0
+      pitch: 0.0
+    second-spawn:
+      world: practice
+      x: 5999.5
+      y: 4.0
+      z: 55.5
+      yaw: 180.0
+      pitch: 0.0
+
+  nodebuff_07:
+    enabled: true
+    kits: [nodebuff, boxing, combo]
+    first-spawn:
+      world: practice
+      x: 6999.5
+      y: 4.0
+      z: -55.5
+      yaw: 0.0
+      pitch: 0.0
+    second-spawn:
+      world: practice
+      x: 6999.5
+      y: 4.0
+      z: 55.5
+      yaw: 180.0
+      pitch: 0.0
+
+  nodebuff_08:
+    enabled: true
+    kits: [nodebuff, boxing, combo]
+    first-spawn:
+      world: practice
+      x: 7999.5
+      y: 4.0
+      z: -55.5
+      yaw: 0.0
+      pitch: 0.0
+    second-spawn:
+      world: practice
+      x: 7999.5
+      y: 4.0
+      z: 55.5
+      yaw: 180.0
+      pitch: 0.0
+
+  nodebuff_09:
+    enabled: true
+    kits: [nodebuff, boxing, combo]
+    first-spawn:
+      world: practice
+      x: 8999.5
+      y: 4.0
+      z: -55.5
+      yaw: 0.0
+      pitch: 0.0
+    second-spawn:
+      world: practice
+      x: 8999.5
+      y: 4.0
+      z: 55.5
+      yaw: 180.0
+      pitch: 0.0
+
+  nodebuff_10:
+    enabled: true
+    kits: [nodebuff, boxing, combo]
+    first-spawn:
+      world: practice
+      x: 9999.5
+      y: 4.0
+      z: -55.5
+      yaw: 0.0
+      pitch: 0.0
+    second-spawn:
+      world: practice
+      x: 9999.5
+      y: 4.0
+      z: 55.5
+      yaw: 180.0
+      pitch: 0.0

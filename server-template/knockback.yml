@@ -1,0 +1,33 @@
+knockback:
+  profiles:
+    poppy:
+      stop-sprint: true
+      friction-horizontal: 2.0
+      friction-vertical: 2.0
+      horizontal: 0.4
+      vertical: 0.4
+      vertical-max: 0.4
+      vertical-min: 0.4
+      extra-horizontal: 0.5
+      extra-vertical: 0.0
+      wtap-extra-horizontal: 0.5
+      wtap-extra-vertical: 0.0
+      add-horizontal: 0.0
+      add-vertical: 0.0
+      projectiles:
+        rod:
+          horizontal: 0.4
+          vertical: 0.4
+        arrow:
+          horizontal: 0.4
+          vertical: 0.4
+        pearl:
+          horizontal: 0.4
+          vertical: 0.4
+        snowball:
+          horizontal: 0.4
+          vertical: 0.4
+        egg:
+          horizontal: 0.4
+          vertical: 0.4
+  current: poppy

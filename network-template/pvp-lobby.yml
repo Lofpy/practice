@@ -1,0 +1,3 @@
+# Network return command only. Does not change PvP worlds, inventory, or listeners.
+lobby-server: false
+hub-server: lobby

@@ -1,0 +1,3 @@
+settings:
+  # Backends deliberately listen only on127.0.0.1; skip the external firewall probing request.
+  stop-notify-bungee: true
