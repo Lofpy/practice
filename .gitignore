@@ -1,0 +1,17 @@
+/target/
+/.tools/
+/runtime/
+/tmp/
+/network/
+/lobby-plugin/target/
+/.codex/
+/.agents/
+/logs/
+# Separate website repository; publish from its own checkout.
+/website/
+.env
+.env.*
+!.env.example
+*.log
+*.lck
+hs_err_pid*
