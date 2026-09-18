@@ -19,3 +19,8 @@ hs_err_pid*
 *.tfstate
 *.tfstate.*
 infra/gcp/terraform.tfvars
+.build/
+bundle/
+__pycache__/
+*.pyc
+*.tfplan

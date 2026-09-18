@@ -1,0 +1,16 @@
+.git
+.github
+.terraform
+**/.terraform
+**/*.tfstate*
+**/*.tfvars
+.env*
+gha-creds-*.json
+runtime
+network
+target
+**/target
+.tools
+tmp
+website
+*.log

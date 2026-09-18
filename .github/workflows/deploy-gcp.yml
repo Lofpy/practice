@@ -2,52 +2,94 @@ name: Deploy production to GCP
 on:
   workflow_dispatch:
     inputs:
-      ref:
-        description: Commit/tag to deploy
+      confirm:
+        description: Type DEPLOY_PRODUCTION after reviewing CI and the maintenance window
         required: true
-        default: main
 permissions:
   contents: read
-  id-token: write
+  actions: read
 concurrency:
   group: poppy-production
   cancel-in-progress: false
-env:
-  REGION: ${{ vars.GCP_REGION }}
-  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-  REPOSITORY: poppy
-  VM_NAME: ${{ vars.GCP_VM_NAME }}
-  VM_ZONE: ${{ vars.GCP_VM_ZONE }}
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     environment: production
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      VM_NAME: ${{ vars.GCP_VM_NAME }}
+      VM_ZONE: ${{ vars.GCP_VM_ZONE }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ inputs.ref }}
-      - uses: google-github-actions/auth@v2
+          persist-credentials: false
+      - name: Verify enforced manual approval before cloud authentication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: python3 deploy/verify-approval.py
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Validate target and prepare immutable release ID
+        run: |
+          set -euo pipefail
+          [[ "$PROJECT_ID" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]]
+          [[ "$REGION" =~ ^[a-z]+-[a-z]+[0-9]+$ ]]
+          [[ "$VM_ZONE" =~ ^[a-z]+-[a-z]+[0-9]+-[a-z]$ ]]
+          [[ "$VM_NAME" =~ ^[a-z][a-z0-9-]+$ ]]
+          echo "IMAGE_BASE=$REGION-docker.pkg.dev/$PROJECT_ID/poppy" >> "$GITHUB_ENV"
+          echo "RELEASE_ID=$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+      - name: Test deployment failure paths
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-yaml
+          /usr/bin/python3 -m unittest discover -s deploy/tests -v
+      - name: Build tested images
+        run: bash deploy/build-images.sh "$IMAGE_BASE" "$RELEASE_ID"
+      - name: Smoke-test runtime without accepting Minecraft EULA
+        run: bash deploy/smoke.sh "$IMAGE_BASE" "$RELEASE_ID"
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-      - uses: google-github-actions/setup-gcloud@v2
-      - name: Resolve immutable release SHA
-        run: echo "RELEASE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-      - name: Configure Artifact Registry
-        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-      - name: Build and push immutable images
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+      - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
+      - name: Publish digest-addressed release
         run: |
           set -euo pipefail
-          base="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}"
-          for target in pvp lobby proxy; do
-            docker build --target "$target" -t "$base/$target:$RELEASE_SHA" -f deploy/Dockerfile .
-            docker push "$base/$target:$RELEASE_SHA"
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          mkdir bundle
+          jq -n --arg id "$RELEASE_ID" --arg sha "$GITHUB_SHA" '{release_id:$id,commit:$sha,images:{}}' > bundle/release.json
+          for service in pvp lobby proxy; do
+            image="$IMAGE_BASE/$service:$RELEASE_ID"
+            docker push "$image"
+            digest=$(docker image inspect "$image" --format '{{json .RepoDigests}}' | jq -er '.[0]')
+            jq --arg service "$service" --arg digest "$digest" '.images[$service]=$digest' bundle/release.json > bundle/next.json
+            mv bundle/next.json bundle/release.json
           done
-      - name: Upload deployment files
+          cp deploy/docker-compose.yml bundle/compose.yml
+          cp deploy/deploy.py bundle/deploy.py
+          cp .build/base-images.json .build/upstream.json bundle/
+      - name: Transfer into unique staging directory using IAP and OS Login
         run: |
-          gcloud compute scp --tunnel-through-iap --zone "$VM_ZONE" \
-            deploy/docker-compose.yml deploy/deploy.sh "$VM_NAME:/tmp/"
-      - name: Backup, deploy and health-check
+          set -euo pipefail
+          gcloud compute ssh "$VM_NAME" --project "$PROJECT_ID" --zone "$VM_ZONE" --tunnel-through-iap --command "test -f /opt/poppy/bootstrap-complete && mkdir -m 700 poppy-$RELEASE_ID"
+          gcloud compute scp --project "$PROJECT_ID" --zone "$VM_ZONE" --tunnel-through-iap bundle/* "$VM_NAME:poppy-$RELEASE_ID/"
+      - name: Run independent host-side transaction
         run: |
-          gcloud compute ssh --tunnel-through-iap --zone "$VM_ZONE" "$VM_NAME" --command \
-            "sudo install -d -m 0755 /opt/poppy/deploy && sudo install -m 0644 /tmp/docker-compose.yml /opt/poppy/deploy/docker-compose.yml && sudo install -m 0755 /tmp/deploy.sh /opt/poppy/deploy/deploy.sh && sudo /opt/poppy/deploy/deploy.sh '${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}' '$RELEASE_SHA'"
+          set -euo pipefail
+          gcloud compute ssh "$VM_NAME" --project "$PROJECT_ID" --zone "$VM_ZONE" --tunnel-through-iap --command "sudo install -d -m 700 /opt/poppy/incoming/$RELEASE_ID && sudo cp poppy-$RELEASE_ID/* /opt/poppy/incoming/$RELEASE_ID/ && sudo chown -R root:root /opt/poppy/incoming/$RELEASE_ID && sudo install -m 755 /opt/poppy/incoming/$RELEASE_ID/deploy.py /opt/poppy/deploy.py && sudo systemctl start poppy-network && sudo systemd-run --unit=poppy-deploy-$RELEASE_ID --wait --pipe --collect /usr/bin/python3 /opt/poppy/deploy.py deploy /opt/poppy/incoming/$RELEASE_ID"
+      - name: Keep release manifest
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-manifest
+          path: bundle/
+          if-no-files-found: warn
+          retention-days: 30
