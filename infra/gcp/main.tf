@@ -56,7 +56,7 @@ resource "google_compute_instance" "poppy" {
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin google-cloud-cli
     mkdir -p /srv/poppy/{pvp,lobby,proxy,backups} /opt/poppy/deploy
   EOF
-  depends_on = [google_project_service.apis]
+  depends_on              = [google_project_service.apis]
 }
 resource "google_compute_firewall" "minecraft" {
   name          = "poppy-minecraft"
