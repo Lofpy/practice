@@ -1,0 +1,7 @@
+project_id = "your-gcp-project-id"
+github_repository = "Lofpy/practice"
+region = "asia-northeast1"
+zone = "asia-northeast1-b"
+machine_type = "e2-standard-4"
+disk_size_gb = 50
+
