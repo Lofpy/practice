@@ -1,0 +1,22 @@
+services:
+  pvp:
+    image: ${IMAGE_BASE}/pvp:${RELEASE_SHA}
+    network_mode: host
+    restart: unless-stopped
+    stop_grace_period: 90s
+    volumes: [/srv/poppy/pvp:/data]
+  lobby:
+    image: ${IMAGE_BASE}/lobby:${RELEASE_SHA}
+    network_mode: host
+    restart: unless-stopped
+    stop_grace_period: 90s
+    volumes: [/srv/poppy/lobby:/data]
+    depends_on: [pvp]
+  proxy:
+    image: ${IMAGE_BASE}/proxy:${RELEASE_SHA}
+    network_mode: host
+    restart: unless-stopped
+    stop_grace_period: 30s
+    volumes: [/srv/poppy/proxy:/data]
+    depends_on: [pvp, lobby]
+
