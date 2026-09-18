@@ -3,5 +3,6 @@ github_repository = "Lofpy/practice"
 region = "asia-northeast1"
 zone = "asia-northeast1-b"
 machine_type = "e2-standard-4"
-disk_size_gb = 50
-
+disk_size_gb = 100
+# Initially no public game access. Use your own IP/32 for acceptance tests.
+player_cidrs = []

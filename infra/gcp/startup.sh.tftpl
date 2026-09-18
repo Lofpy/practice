@@ -1,0 +1,77 @@
+#!/bin/bash
+set -euo pipefail
+if [ -f /opt/poppy/bootstrap-complete ]; then
+  mountpoint -q /srv/poppy
+  exit 0
+fi
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y ca-certificates curl gnupg python3 iptables
+# Fail-closed at boot. Proxy uses IPv4 only; SSH remains reachable via IAP.
+iptables -w -C INPUT ! -i lo -p tcp --dport 25565 -j REJECT 2>/dev/null ||
+  iptables -w -I INPUT ! -i lo -p tcp --dport 25565 -j REJECT
+install -d -m 0755 /etc/apt/keyrings /opt/poppy /srv/poppy
+curl --fail --silent --show-error --location https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+curl --fail --silent --show-error --location https://packages.cloud.google.com/apt/doc/apt-key.gpg |
+  gpg --dearmor --yes -o /etc/apt/keyrings/google-cloud.gpg
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list
+echo "deb [signed-by=/etc/apt/keyrings/google-cloud.gpg] https://packages.cloud.google.com/apt cloud-sdk main" > /etc/apt/sources.list.d/google-cloud-sdk.list
+
+device=/dev/disk/by-id/google-poppy-data
+for attempt in $(seq 1 60); do
+  [ -b "$device" ] && break
+  sleep 1
+done
+test -b "$device"
+if ! blkid "$device" >/dev/null; then
+  # Format only this attached, completely blank disk. Never reformat unknown data.
+  test -z "$(wipefs --no-act --noheadings "$device")"
+  mkfs.ext4 -m 0 "$device"
+fi
+test "$(blkid -s TYPE -o value "$device")" = ext4
+uuid=$(blkid -s UUID -o value "$device")
+grep -q "UUID=$uuid /srv/poppy " /etc/fstab ||
+  echo "UUID=$uuid /srv/poppy ext4 defaults 0 2" >> /etc/fstab
+mountpoint -q /srv/poppy || mount /srv/poppy
+for name in pvp lobby proxy; do
+  install -d -o 10001 -g 10001 -m 0750 "/srv/poppy/state/$name"
+done
+install -d -m 0700 /srv/poppy/releases /srv/poppy/backups
+cat > /etc/poppy.json <<'CONFIG'
+${config}
+CONFIG
+chmod 0600 /etc/poppy.json
+# Mount must precede Docker restarts; reboots must keep ingress closed until resume.
+install -d /etc/systemd/system/docker.service.d
+cat > /etc/systemd/system/docker.service.d/poppy.conf <<'UNIT'
+[Unit]
+RequiresMountsFor=/srv/poppy
+[Service]
+ExecStartPre=/bin/sh -c '/usr/sbin/iptables -w -C INPUT ! -i lo -p tcp --dport 25565 -j REJECT 2>/dev/null || /usr/sbin/iptables -w -I INPUT ! -i lo -p tcp --dport 25565 -j REJECT'
+UNIT
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin google-cloud-cli
+gcloud auth configure-docker '${registry_host}' --quiet
+cat > /etc/systemd/system/poppy-network.service <<'UNIT'
+[Unit]
+Description=Poppy network guarded restart and shutdown
+After=docker.service network-online.target
+Requires=docker.service
+RequiresMountsFor=/srv/poppy
+ConditionPathExists=/opt/poppy/deploy.py
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/python3 /opt/poppy/deploy.py resume
+ExecStop=/usr/bin/python3 /opt/poppy/deploy.py stop
+TimeoutStartSec=infinity
+TimeoutStopSec=infinity
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable docker poppy-network
+systemctl start docker
+touch /opt/poppy/bootstrap-complete
+# First deployment starts the service explicitly; later boots resume only committed state.
+if [ -f /opt/poppy/deploy.py ]; then systemctl start poppy-network; fi
