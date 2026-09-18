@@ -2,12 +2,20 @@ package com.poppy.practice.combat;
 
 import com.poppy.practice.config.ComboConfig;
 import dev.cobblesword.nachospigot.knockback.KnockbackProfile;
+import net.minecraft.server.v1_8_R3.DispenserRegistry;
 import net.minecraft.server.v1_8_R3.EntityPlayer;
+import org.bukkit.Bukkit;
+import org.bukkit.Server;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.craftbukkit.v1_8_R3.entity.CraftPlayer;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.PluginManager;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.lang.reflect.Field;
+import java.util.Collections;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -17,6 +25,30 @@ import static org.mockito.Mockito.*;
 
 public class ComboCombatLiveUpdateTest {
     private static final double EPSILON = 0.000000001D;
+    private static Field serverField;
+    private static Object previousServer;
+
+    @BeforeClass
+    public static void initializeBukkitForNativePlayer() throws Exception {
+        // CraftEntity initializes a static PermissibleBase when CraftPlayer is
+        // first mocked. Supply its dependencies even when this class runs first.
+        serverField = Bukkit.class.getDeclaredField("server");
+        serverField.setAccessible(true);
+        previousServer = serverField.get(null);
+        Server server = mock(Server.class);
+        PluginManager plugins = mock(PluginManager.class);
+        when(server.getPluginManager()).thenReturn(plugins);
+        when(plugins.getDefaultPermissions(anyBoolean())).thenReturn(Collections.emptySet());
+        serverField.set(null, server);
+        DispenserRegistry.c();
+    }
+
+    @AfterClass
+    public static void restoreBukkitServer() throws Exception {
+        if (serverField != null) {
+            serverField.set(null, previousServer);
+        }
+    }
 
     @Test
     public void updatesEveryTrackedHumanAndNpcButNotOrdinaryParticipants() {

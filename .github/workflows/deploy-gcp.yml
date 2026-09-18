@@ -1,0 +1,53 @@
+name: Deploy production to GCP
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit/tag to deploy
+        required: true
+        default: main
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: poppy-production
+  cancel-in-progress: false
+env:
+  REGION: ${{ vars.GCP_REGION }}
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REPOSITORY: poppy
+  VM_NAME: ${{ vars.GCP_VM_NAME }}
+  VM_ZONE: ${{ vars.GCP_VM_ZONE }}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Resolve immutable release SHA
+        run: echo "RELEASE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Configure Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+      - name: Build and push immutable images
+        run: |
+          set -euo pipefail
+          base="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}"
+          for target in pvp lobby proxy; do
+            docker build --target "$target" -t "$base/$target:$RELEASE_SHA" -f deploy/Dockerfile .
+            docker push "$base/$target:$RELEASE_SHA"
+          done
+      - name: Upload deployment files
+        run: |
+          gcloud compute scp --tunnel-through-iap --zone "$VM_ZONE" \
+            deploy/docker-compose.yml deploy/deploy.sh "$VM_NAME:/tmp/"
+      - name: Backup, deploy and health-check
+        run: |
+          gcloud compute ssh --tunnel-through-iap --zone "$VM_ZONE" "$VM_NAME" --command \
+            "sudo install -d -m 0755 /opt/poppy/deploy && sudo install -m 0644 /tmp/docker-compose.yml /opt/poppy/deploy/docker-compose.yml && sudo install -m 0755 /tmp/deploy.sh /opt/poppy/deploy/deploy.sh && sudo /opt/poppy/deploy/deploy.sh '${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}' '$RELEASE_SHA'"

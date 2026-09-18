@@ -15,3 +15,7 @@
 *.log
 *.lck
 hs_err_pid*
+.terraform/
+*.tfstate
+*.tfstate.*
+infra/gcp/terraform.tfvars
