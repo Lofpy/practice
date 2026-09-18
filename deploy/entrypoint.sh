@@ -12,9 +12,11 @@ if [ "$SERVER_KIND" = pvp ] || [ "$SERVER_KIND" = lobby ]; then
   fi
   if [ "$SERVER_KIND" = pvp ]; then
     sed -i 's/^server-port=.*/server-port=25566/; s/^server-ip=.*/server-ip=127.0.0.1/; s/^online-mode=.*/online-mode=false/' /data/server.properties
+    if [ ! -f /data/spigot.yml ]; then
+      printf 'settings:\n  bungeecord: true\n' > /data/spigot.yml
+    fi
   fi
   exec java -Xms512M "-Xmx${JAVA_MEMORY}" -XX:+UseG1GC -jar windspigot.jar nogui
 fi
 cp /opt/poppy/velocity.jar /data/velocity.jar
 exec java -Xms256M "-Xmx${JAVA_MEMORY}" -jar velocity.jar
-
