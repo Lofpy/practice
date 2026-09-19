@@ -179,13 +179,15 @@ final class BotNpc {
                 PERMANENT_EFFECT_DURATION, SPEED_TWO_AMPLIFIER, false, true), true);
     }
 
-    void hideFromTab(Player viewer) {
+    /** Remove only when this viewer stops watching the NPC, never on a hide-tab timer. */
+    void removePlayerInfo(Player viewer) {
         if (viewer != null && viewer.isOnline()) {
             sendPlayerInfo(viewer, PacketPlayOutPlayerInfo.EnumPlayerInfoAction.REMOVE_PLAYER);
         }
     }
 
-    void showInTab(Player viewer) {
+    /** Player spawns in 1.8+ require this profile, including after tracker re-entry. */
+    void showPlayerInfo(Player viewer) {
         if (viewer != null && viewer.isOnline()) {
             sendPlayerInfo(viewer, PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER);
         }
@@ -198,9 +200,9 @@ final class BotNpc {
         }
         spawned = false;
         if (viewer != null && viewer.isOnline()) {
-            sendPlayerInfo(viewer, PacketPlayOutPlayerInfo.EnumPlayerInfoAction.REMOVE_PLAYER);
             ((CraftPlayer) viewer).getHandle().playerConnection.sendPacket(
                     new PacketPlayOutEntityDestroy(handle.getId()));
+            sendPlayerInfo(viewer, PacketPlayOutPlayerInfo.EnumPlayerInfoAction.REMOVE_PLAYER);
         }
         handle.setSprinting(false);
         world.removeEntity(handle);

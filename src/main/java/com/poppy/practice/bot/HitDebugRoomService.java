@@ -148,7 +148,8 @@ public final class HitDebugRoomService {
                 + ChatColor.GRAY + " to restore bots or " + ChatColor.WHITE
                 + "/lobby" + ChatColor.GRAY + " to return. Attack range: "
                 + format(attackRange) + " blocks.");
-        scheduleTabHide(player);
+        // Player info is needed for subsequent entity spawns, not just the tab list.
+        // Keep it until the viewer leaves or the debug NPCs are removed.
         return true;
     }
 
@@ -550,27 +551,18 @@ public final class HitDebugRoomService {
     }
 
     private void showProfiles(Player viewer) {
-        for (DebugBot bot : bots.values()) bot.npc.showInTab(viewer);
+        for (DebugBot bot : bots.values()) bot.npc.showPlayerInfo(viewer);
     }
 
     private void hideProfiles(Player viewer) {
-        for (DebugBot bot : bots.values()) bot.npc.hideFromTab(viewer);
-    }
-
-    private void scheduleTabHide(final Player viewer) {
-        Bukkit.getScheduler().runTaskLater(plugin, new Runnable() {
-            @Override
-            public void run() {
-                if (viewer.isOnline() && isParticipant(viewer)) hideProfiles(viewer);
-            }
-        }, 20L);
+        for (DebugBot bot : bots.values()) bot.npc.removePlayerInfo(viewer);
     }
 
     private void removeBots() {
         clearPearls();
         for (DebugBot bot : bots.values()) {
             for (UUID playerId : participants) {
-                bot.npc.hideFromTab(Bukkit.getPlayer(playerId));
+                bot.npc.removePlayerInfo(Bukkit.getPlayer(playerId));
             }
             bot.npc.remove(null);
         }
