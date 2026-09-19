@@ -280,7 +280,8 @@ public final class BotService {
                 }
             }
             scoreboardService.showBotMatch(player, npc.getPlayer(), match);
-            scheduleTabRemoval(match, npc);
+            // Retain the player's profile until despawn. Chunk loading/retracking may
+            // deliver a player spawn long after the initial ADD_PLAYER packet.
             player.sendMessage(ChatColor.GRAY + "Bot match started against " + coloredBotName() + ChatColor.GRAY + ".");
             if (placement) {
                 player.sendMessage(ChatColor.GOLD + "Certification: " + kit.getId()
@@ -321,17 +322,6 @@ public final class BotService {
         matchesByBot.put(match.getBotEntityId(), match);
         botsById.put(match.getBotEntityId(), npc);
         settingsByPlayer.put(match.getPlayerId(), matchSettings);
-    }
-
-    private void scheduleTabRemoval(final BotMatch match, final BotNpc npc) {
-        Bukkit.getScheduler().runTaskLater(plugin, new Runnable() {
-            @Override
-            public void run() {
-                if (getByPlayer(match.getPlayerId()) == match) {
-                    npc.hideFromTab(Bukkit.getPlayer(match.getPlayerId()));
-                }
-            }
-        }, 20L);
     }
 
     private void startCountdown(final BotMatch match) {
