@@ -173,3 +173,42 @@ GCPプロジェクト未作成のため、初回plan、IAP/OS Login/WIF、GCS転
 Java17上の実バックエンド、実クライアントのlobby↔pvp、レート/KB保持、
 本番相当の正常停止/失敗時復元、VM再起動は運営者の承認とEULA同意後の検証が必要。
 ゲーム入口の一般公開はこれらが終わった後にする。CI成功と本番投入可能は同義ではない。
+# PostgreSQLを利用する既存サーバーの追加要件
+
+DBを有効にした構成では、初回デプロイ前に本番DBを復元してください。
+デプロイ処理は空のDBを自動作成せず、次の既存構成を要求します。
+
+- コンテナ名: `poppy-postgres`（ゲームのComposeとは別管理）
+- イメージ: 復元確認済みの PostgreSQL 18。同じコンテナを再利用し、アプリのデプロイではDBイメージを更新しません。
+- bind mount: `/srv/poppy/postgres-production` → `/var/lib/postgresql`
+- `PGDATA=/var/lib/postgresql/18/docker`
+- 接続先: `127.0.0.1:54329`。外部公開しません。
+- 管理者: `poppy_admin`、アプリ用DB・ロール: `poppy_practice`
+- アプリ用パスワード: `/srv/poppy/secrets/postgres-app-password.txt`、所有者 `10001:10001`、モード `0400`
+- Practice設定の `storage.postgres.password-file`: `/run/secrets/postgres-app-password.txt`
+- `namespace` と `storage-writer.id` は移行元の値を保持し、旧サーバーとの同時書き込みを禁止します。
+
+ゲームComposeはアプリ用パスワードだけを読み取り専用でマウントします。
+管理者パスワードや秘密の値をGitHubへ登録する必要はありません。
+
+## デプロイ時のDB保護
+
+ゲームを正常停止した後、`pg_ctl stop -m fast` でPostgreSQLを正常停止します。
+停止を確認できない場合は強制終了せず、入口を閉じたまま処理を中断します。
+`state` と `postgres-production` 全体を同じアーカイブに保存し、SHA-256とともにGCSへアップロードします。
+DBを起動してスキーマテーブルに接続できることを確認してから、ゲームを起動します。
+新しいゲームの起動に失敗した場合は、全書き込み元を止めて両方のディレクトリを復元します。
+復元前のデータは `failed-data-*` に保持します。復元中断後は既存の `recover` コマンドで再試行できます。
+
+物理バックアップの復元には保存時と同一のDBイメージIDを要求します。
+PostgreSQLのバージョン更新、パスワード変更、他のDB追加はこのアプリデプロイと分けて計画してください。
+DB全体の復元はロールとパスワードハッシュも戻すため、対応する秘密ファイルを別途保持してください。
+旧形式のゲームデータだけのアーカイブは、自動DB復元には使えません。
+バックアップとGCS転送中もDBは停止するため、データ量に応じて停止時間が増えます。
+実行中DBのファイルをtarでコピーする運用には変更しないでください。
+参考: https://www.postgresql.org/docs/18/backup-file.html
+
+CIの `database-restore` は使い捨てPostgreSQLを実際に起動し、ゲームファイルとDBの変更、
+スキーマバージョンの変更、復元途中の欠落を模擬して、両方を元に戻せることを検証します。
+本番でのゲーム接続確認と、デプロイ前後のデータ確認は別途必要です。
+
