@@ -2,6 +2,7 @@
 import fcntl
 import hashlib
 import io
+import inspect
 import json
 import os
 from pathlib import Path
@@ -154,8 +155,13 @@ class Deployment:
                 health = state.get("Health", {}).get("Status")
                 if state["Running"] and health == "healthy":
                     break
-                if not state["Running"] or health == "unhealthy" or time.monotonic() >= deadline:
-                    self.compose(release, "logs", "--no-color", "--tail", "80", service)
+                # Docker can become unhealthy before slow first-start work ends.
+                # Keep the bounded host startup deadline authoritative.
+                if not state["Running"] or time.monotonic() >= deadline:
+                    print("Readiness state: " + json.dumps(state), flush=True)
+                    logs = self.compose(release, "logs", "--no-color", "--tail", "80", service)
+                    print(logs.stdout, flush=True)
+                    print(logs.stderr, file=sys.stderr, flush=True)
                     raise RuntimeError("Readiness failed: " + service)
                 time.sleep(2)
 
@@ -241,7 +247,12 @@ class Deployment:
             # Extract fully before touching either live directory. Retrying recover
             # also works if an interruption occurred between the two renames.
             with tempfile.TemporaryDirectory(prefix="restore-", dir=self.root) as temp:
-                tar.extractall(temp, filter="fully_trusted")
+                # Older Debian Python 3.11 lacks the filter parameter. All
+                # members were validated above; extraction uses a fresh private
+                # directory and must preserve PostgreSQL ownership and modes.
+                options = ({"filter": "fully_trusted"}
+                           if "filter" in inspect.signature(tar.extractall).parameters else {})
+                tar.extractall(temp, **options)
                 quarantine = self.root / ("failed-data-" + str(time.time_ns()))
                 quarantine.mkdir(mode=0o700)
                 for name in ("state", DATABASE_DIR):
