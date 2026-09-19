@@ -191,7 +191,9 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "assertion.repository_id == '${var.github_repository_id}'",
     "assertion.repository_owner_id == '${var.github_owner_id}'",
     "assertion.ref == 'refs/heads/main'",
-    "assertion.sub == 'repo:${var.github_repository}:environment:production'",
+    # GitHub repositories created after 2026-07-15 include immutable IDs in sub.
+    # Both exact formats identify this same repository; ID checks above still apply.
+    "assertion.sub in ['repo:${var.github_repository}:environment:production', 'repo:${split("/", var.github_repository)[0]}@${var.github_owner_id}/${split("/", var.github_repository)[1]}@${var.github_repository_id}:environment:production']",
     "assertion.workflow_ref == '${var.github_repository}/.github/workflows/deploy-gcp.yml@refs/heads/main'",
     "assertion.event_name == 'workflow_dispatch'"
   ])
