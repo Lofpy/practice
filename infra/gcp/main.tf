@@ -264,3 +264,11 @@ resource "google_storage_bucket_iam_member" "backup_writer" {
   role   = "roles/storage.objectCreator"
   member = "serviceAccount:${google_service_account.vm.email}"
 }
+
+# gcloud storage cp checks destination objects; restore also needs read access.
+# Scoped to the backup bucket. No object update/delete permissions are granted.
+resource "google_storage_bucket_iam_member" "backup_reader" {
+  bucket = google_storage_bucket.backups.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.vm.email}"
+}
