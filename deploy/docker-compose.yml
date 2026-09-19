@@ -26,7 +26,14 @@ services:
   pvp:
     <<: *runtime
     image: ${PVP_IMAGE:?digest required}
-    volumes: ["${DATA_ROOT:?persistent mount required}/state/pvp:/data"]
+    volumes:
+      - "${DATA_ROOT:?persistent mount required}/state/pvp:/data"
+      - type: bind
+        source: ${DATA_ROOT:?persistent mount required}/secrets/postgres-app-password.txt
+        target: /run/secrets/postgres-app-password.txt
+        read_only: true
+        bind:
+          create_host_path: false
   lobby:
     <<: *runtime
     image: ${LOBBY_IMAGE:?digest required}

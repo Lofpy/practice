@@ -1,6 +1,7 @@
 """Root-owned host transaction. Stop timeout never kills a writer or restores over it."""
 import fcntl
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -9,9 +10,12 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 
 SERVICES = ("pvp", "lobby", "proxy")
+DATABASE = "poppy-postgres"
+DATABASE_DIR = "postgres-production"
 
 
 def execute(args, check=True):
@@ -55,6 +59,62 @@ class Deployment:
     def state(self, container):
         return json.loads(self.run(["docker", "inspect", "--format", "{{json .State}}", container]).stdout)
 
+    def database_info(self):
+        info = json.loads(self.run(["docker", "inspect", DATABASE]).stdout)[0]
+        mounts = [m for m in info["Mounts"] if m["Destination"] == "/var/lib/postgresql"]
+        if (len(mounts) != 1 or mounts[0]["Type"] != "bind" or
+                mounts[0]["Source"] != str(self.root / DATABASE_DIR)):
+            raise RuntimeError("Database must use the managed persistent directory")
+        if any(m["Destination"].startswith("/var/lib/postgresql/") for m in info["Mounts"]):
+            raise RuntimeError("Nested database mounts cannot be backed up safely")
+        if "PGDATA=/var/lib/postgresql/18/docker" not in info["Config"]["Env"]:
+            raise RuntimeError("Expected PostgreSQL 18 data layout")
+        return info
+
+    def stop_database(self):
+        self.database_info()
+        self.run(["docker", "update", "--restart=no", DATABASE])
+        if self.state(DATABASE)["Running"]:
+            # Fast is a clean checkpointed shutdown, never immediate/SIGKILL.
+            # docker exec can lose its connection when PID 1 exits; inspect below
+            # is authoritative. A timeout must not fall back to docker stop/kill.
+            self.run(["docker", "exec", "--user", "postgres", DATABASE,
+                      "pg_ctl", "-D", "/var/lib/postgresql/18/docker", "stop",
+                      "-m", "fast", "-w", "-t", str(self.stop_timeout)], check=False)
+        deadline = time.monotonic() + self.stop_timeout
+        while self.state(DATABASE)["Running"]:
+            if time.monotonic() >= deadline:
+                raise RuntimeError("Database still saving; NOT killed")
+            time.sleep(1)
+        state = self.state(DATABASE)
+        if state.get("ExitCode") != 0 or state.get("OOMKilled"):
+            raise RuntimeError("Database shutdown was not clean; manual recovery required")
+
+    def start_database(self):
+        self.database_info()
+        version = self.root / DATABASE_DIR / "18/docker/PG_VERSION"
+        if not version.is_file() or version.read_text().strip() != "18":
+            raise RuntimeError("Missing PostgreSQL data; refusing to initialize an empty database")
+        # Keep automatic restart disabled until the transaction commits. A reboot
+        # during restore must not start PostgreSQL against partially restored data.
+        self.run(["docker", "update", "--restart=no", DATABASE])
+        if not self.state(DATABASE)["Running"]:
+            self.run(["docker", "start", DATABASE])
+        deadline = time.monotonic() + self.health_timeout
+        while True:
+            result = self.run(["docker", "exec", DATABASE, "psql", "-X", "-w",
+                               "-p", "54329", "-U", "poppy_admin", "-d", "poppy_practice",
+                               "-v", "ON_ERROR_STOP=1", "-Atc",
+                               "SELECT count(*) FROM public.poppy_schema_version"], check=False)
+            if result.returncode == 0 and result.stdout.strip() == "1":
+                return
+            if not self.state(DATABASE)["Running"] or time.monotonic() >= deadline:
+                raise RuntimeError("Database readiness failed; game servers remain stopped")
+            time.sleep(2)
+
+    def database_committed(self):
+        self.run(["docker", "update", "--restart=unless-stopped", DATABASE])
+
     def stop(self, release, allow_exited_failure=False):
         if release is None:
             return
@@ -82,6 +142,7 @@ class Deployment:
             for container in self.containers(release, service):
                 if self.state(container)["Running"]:
                     raise RuntimeError("Refusing to replace a running writer")
+        self.start_database()
         for service in SERVICES:
             self.compose(release, "up", "-d", "--no-deps", "--force-recreate", service)
             deadline = time.monotonic() + self.health_timeout
@@ -122,15 +183,28 @@ class Deployment:
         return release
 
     def backup(self, release):
+        info = self.database_info()
+        if info["State"]["Running"] or info["State"].get("ExitCode") != 0:
+            raise RuntimeError("Database must be cleanly stopped before backup")
         directory = self.root / "backups"
         directory.mkdir(exist_ok=True)
         archive = directory / (release.name + "-" + str(time.time_ns()) + ".tar.gz")
         # Symlinks/special files in server data need explicit operator review.
-        for path in (self.root / "state").rglob("*"):
-            if path.is_symlink() or not (path.is_file() or path.is_dir()):
-                raise RuntimeError("Unsupported backup entry: " + str(path))
+        for name in ("state", DATABASE_DIR):
+            directory_root = self.root / name
+            if directory_root.is_symlink() or not directory_root.is_dir():
+                raise RuntimeError("Missing or unsafe backup root: " + name)
+            for path in directory_root.rglob("*"):
+                if path.is_symlink() or not (path.is_file() or path.is_dir()):
+                    raise RuntimeError("Unsupported backup entry: " + str(path))
         with tarfile.open(archive, "w:gz", dereference=False) as tar:
             tar.add(self.root / "state", arcname="state")
+            tar.add(self.root / DATABASE_DIR, arcname=DATABASE_DIR)
+            metadata = json.dumps({"database_image": info["Image"]}).encode()
+            member = tarfile.TarInfo("database-backup.json")
+            member.size = len(metadata)
+            member.mode = 0o600
+            tar.addfile(member, io.BytesIO(metadata))
         with tarfile.open(archive, "r:gz") as tar:
             tar.getmembers()  # Validate the finished archive before upgrading.
         with archive.open("rb") as source:
@@ -151,15 +225,31 @@ class Deployment:
         with tarfile.open(archive, "r:gz") as tar:
             for member in tar.getmembers():
                 parts = Path(member.name).parts
-                if not parts or parts[0] != "state" or ".." in parts or member.name.startswith("/"):
+                if (not parts or parts[0] not in ("state", DATABASE_DIR, "database-backup.json")
+                        or ".." in parts or member.name.startswith("/")):
                     raise ValueError("Unsafe backup path")
                 if not (member.isfile() or member.isdir()):
                     raise ValueError("Unsafe backup entry")
-            quarantine = self.root / ("failed-state-" + str(time.time_ns()))
-            (self.root / "state").rename(quarantine)
-            # Paths and entry types were checked above; preserve game UID/GID.
-            tar.extractall(self.root, filter="fully_trusted")
-        return quarantine
+            names = {m.name for m in tar.getmembers()}
+            if not {"state", DATABASE_DIR, "database-backup.json",
+                    DATABASE_DIR + "/18/docker/PG_VERSION"} <= names:
+                raise ValueError("Backup must contain both game state and PostgreSQL")
+            metadata = json.load(tar.extractfile("database-backup.json"))
+            if metadata["database_image"] != self.database_info()["Image"]:
+                raise ValueError("Physical restore requires the same PostgreSQL image")
+            self.stop_database()
+            # Extract fully before touching either live directory. Retrying recover
+            # also works if an interruption occurred between the two renames.
+            with tempfile.TemporaryDirectory(prefix="restore-", dir=self.root) as temp:
+                tar.extractall(temp, filter="fully_trusted")
+                quarantine = self.root / ("failed-data-" + str(time.time_ns()))
+                quarantine.mkdir(mode=0o700)
+                for name in ("state", DATABASE_DIR):
+                    destination = self.root / name
+                    if destination.exists():
+                        destination.rename(quarantine / name)
+                    (Path(temp) / name).rename(destination)
+        return quarantine / "state"
 
     def recover(self):
         """Explicit operator command; retry graceful stop, never override a live writer."""
@@ -171,6 +261,7 @@ class Deployment:
             if release and release.resolve().parent != (self.root / "releases").resolve():
                 raise ValueError("Journal release outside release directory")
         self.stop(candidate, allow_exited_failure=True)
+        self.stop(previous, allow_exited_failure=True)
         if transaction.get("backup"):
             archive = Path(transaction["backup"])
             if archive.resolve().parent != (self.root / "backups").resolve():
@@ -181,6 +272,7 @@ class Deployment:
             self.switch(previous)
         self.journal.unlink()
         if previous:
+            self.database_committed()
             self.gate(False)
 
     def switch(self, release):
@@ -201,6 +293,7 @@ class Deployment:
         self.gate(True)
         atomic_json(self.journal, {"previous": str(previous), "candidate": str(release), "phase": "stopping"})
         self.stop(previous)  # Failure intentionally leaves ingress blocked and journal intact.
+        self.stop_database()  # Also fail closed if PostgreSQL cannot shut down cleanly.
         try:
             archive = self.backup(release)
         except Exception:
@@ -208,6 +301,7 @@ class Deployment:
                 self.start(previous)
             self.journal.unlink()
             if previous:
+                self.database_committed()
                 self.gate(False)
             raise
         atomic_json(self.journal, {"previous": str(previous), "candidate": str(release),
@@ -223,10 +317,12 @@ class Deployment:
                 self.switch(previous)
             self.journal.unlink()
             if previous:
+                self.database_committed()
                 self.gate(False)
             raise
         self.switch(release)
         self.journal.unlink()
+        self.database_committed()
         self.gate(False)
 
     def resume(self):
@@ -237,6 +333,7 @@ class Deployment:
             release = self.current.resolve()
             self.stop(release)
             self.start(release)
+            self.database_committed()
             self.gate(False)
 
 
@@ -258,6 +355,7 @@ def main():
             deploy.gate(True)
             if deploy.current.exists():
                 deploy.stop(deploy.current.resolve())
+            deploy.stop_database()
         else:
             raise SystemExit("Use deploy BUNDLE, resume, stop, or recover")
 

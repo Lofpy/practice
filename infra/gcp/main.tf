@@ -228,6 +228,7 @@ resource "google_compute_instance_iam_member" "login" {
 }
 
 resource "google_project_iam_custom_role" "lookup" {
+  depends_on  = [google_project_service.apis]
   role_id     = "poppyInstanceLookup"
   title       = "Read Compute metadata for gcloud IAP SSH"
   permissions = ["compute.instances.get", "compute.instances.list", "compute.projects.get", "compute.zones.get", "compute.zones.list"]

@@ -38,6 +38,12 @@ class Transaction(deploy.Deployment):
             directory.mkdir(parents=True)
             (directory / "eula.txt").write_text("eula=true\n")  # Fixture only; no Minecraft runtime.
 
+    def stop_database(self):
+        pass
+
+    def database_committed(self):
+        pass
+
     def stage(self, bundle):
         self.events.append("pull")
         if self.failure == "pull":
@@ -183,10 +189,19 @@ class HostTests(unittest.TestCase):
                 calls.append(list(map(str, args)))
                 return subprocess.CompletedProcess(args, 0, "", "")
             tx = deploy.Deployment(root, {"backup_bucket": "test"}, runner=run)
+            db = root / deploy.DATABASE_DIR / "18/docker"
+            db.mkdir(parents=True)
+            (db / "PG_VERSION").write_text("18")
+            (db / "example").write_text("original db")
+            tx.database_info = lambda: {"State": {"Running": False, "ExitCode": 0}, "Image": "test-image"}
+            tx.stop_database = lambda: None
             archive = tx.backup(Path("/release"))
+            (db / "example").write_text("new db")
             target.write_text("changed")
             quarantined = tx.restore(archive)
             self.assertEqual(target.read_text(), "rating: 1700\n")
+            self.assertEqual((db / "example").read_text(), "original db")
+            self.assertEqual((quarantined.parent / deploy.DATABASE_DIR / "18/docker/example").read_text(), "new db")
             self.assertEqual((quarantined / "pvp/ratings.yml").read_text(), "changed")
             self.assertEqual(len(calls), 2)
 
@@ -210,7 +225,9 @@ class HostTests(unittest.TestCase):
             (root / "state").mkdir()
             (root / "state/link").symlink_to("/etc/passwd")
             with self.assertRaises(RuntimeError):
-                deploy.Deployment(root, {}).backup(Path("/release"))
+                tx = deploy.Deployment(root, {})
+                tx.database_info = lambda: {"State": {"Running": False, "ExitCode": 0}, "Image": "test-image"}
+                tx.backup(Path("/release"))
 
 
 class RuntimeTests(unittest.TestCase):
@@ -243,3 +260,4 @@ class RuntimeTests(unittest.TestCase):
                 with self.assertRaises(AssertionError):
                     runtime.initialize(data, defaults)
             self.assertEqual((data / "knockback.yml").read_text(), "horizontal: 0.33\n")
+
