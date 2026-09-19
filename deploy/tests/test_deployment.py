@@ -146,6 +146,37 @@ class TransactionTests(unittest.TestCase):
 
 
 class HostTests(unittest.TestCase):
+    def test_restore_on_python_without_extract_filter(self):
+        original = tarfile.TarFile.extractall
+        def legacy_extractall(tar, path=".", members=None, *, numeric_owner=False):
+            return original(tar, path, members, numeric_owner=numeric_owner)
+        with patch.object(tarfile.TarFile, "extractall", legacy_extractall):
+            self.test_backup_roundtrip_preserves_files_and_quarantines_failed_data()
+
+    def test_slow_start_can_recover_from_unhealthy_before_deadline(self):
+        tx = deploy.Deployment("/unused", {})
+        tx.start_database = lambda: None
+        tx.containers = lambda release, service: [service]
+        tx.compose = lambda *args: None
+        states = ([{"Running": False}] * 3 +
+                  [{"Running": True, "Health": {"Status": status}}
+                   for status in ("unhealthy", "healthy", "healthy", "healthy")])
+        with patch.object(tx, "state", side_effect=states), patch.object(deploy.time, "sleep"):
+            tx.start(Path("/release"))
+
+    def test_unhealthy_start_still_fails_at_deadline(self):
+        tx = deploy.Deployment("/unused", {})
+        tx.start_database = lambda: None
+        tx.containers = lambda release, service: [service]
+        tx.compose = lambda *args: subprocess.CompletedProcess([], 0, "startup log", "")
+        states = ([{"Running": False}] * 3 +
+                  [{"Running": True, "Health": {"Status": "unhealthy"}}] * 2)
+        with patch.object(tx, "state", side_effect=states), \
+                patch.object(deploy.time, "monotonic", side_effect=[0, 1, 241]), \
+                patch.object(deploy.time, "sleep"):
+            with self.assertRaisesRegex(RuntimeError, "Readiness failed: pvp"):
+                tx.start(Path("/release"))
+
     def test_stop_issues_console_commands_proxy_first_and_never_kills(self):
         calls = []
         counts = {}
