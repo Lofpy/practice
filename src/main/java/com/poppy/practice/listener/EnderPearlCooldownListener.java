@@ -43,6 +43,11 @@ public final class EnderPearlCooldownListener implements Listener {
     private final ProfileManager profileManager;
     private final MatchManager matchManager;
     private final BotService botService;
+    private com.poppy.practice.language.LanguageService languages;
+
+    public void setLanguageService(com.poppy.practice.language.LanguageService languages) {
+        this.languages = languages;
+    }
     private final Set<UUID> releasingDelayedPearls = new HashSet<UUID>();
     private final Map<UUID, BukkitTask> cooldownDisplayTasks =
             new HashMap<UUID, BukkitTask>();
@@ -269,8 +274,9 @@ public final class EnderPearlCooldownListener implements Listener {
     }
 
     private void sendCooldown(Player player, long remainingMillis) {
-        player.sendMessage(ChatColor.RED + "Ender pearl cooldown: "
-                + remainingSeconds(remainingMillis) + "s");
+        String japanese = "パールのクールダウン: " + remainingSeconds(remainingMillis) + "秒";
+        String english = "Ender pearl cooldown: " + remainingSeconds(remainingMillis) + "s";
+        player.sendMessage(ChatColor.RED + (languages == null ? japanese : languages.text(player, japanese, english)));
     }
 
     static boolean isEnderPearlUse(Action action, ItemStack item) {

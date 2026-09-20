@@ -103,6 +103,8 @@ public final class PracticePlugin extends JavaPlugin {
     private TierMenu tierMenu;
     private DuelService duelService;
     private CosmeticSettingsMenu settingsMenu;
+    private com.poppy.practice.language.LanguageService languageService;
+    private com.poppy.practice.spectator.SpectatorService spectatorService;
 
     @Override
     public void onEnable() {
@@ -114,6 +116,7 @@ public final class PracticePlugin extends JavaPlugin {
         profileManager = new ProfileManager();
         ratingService = new RatingService(getDataFolder(), getLogger());
         PreferencesService preferences = new PreferencesService(getDataFolder(), getLogger());
+        languageService = new com.poppy.practice.language.LanguageService(preferences);
         settingsMenu = new CosmeticSettingsMenu(preferences, profileManager);
         MatchFinishEffects finishEffects = new MatchFinishEffects(preferences);
         KitManager kitManager = new KitManager();
@@ -131,7 +134,8 @@ public final class PracticePlugin extends JavaPlugin {
         scoreboardService = new MatchScoreboardService(this, pingService);
         scoreboardService.setRatingService(ratingService);
         resultService = new MatchResultService(profileManager);
-        pingCommand = new PingCommand(pingService);
+        resultService.setLanguageService(languageService);
+        pingCommand = new PingCommand(pingService, languageService);
         damageDebugService = new DamageDebugService(this);
         chatterKbService = new ChatterKbService(this, damageDebugService);
         chatterProtocolAdapter = new ProtocolAdapter47(this, chatterKbService);
@@ -146,11 +150,16 @@ public final class PracticePlugin extends JavaPlugin {
                 + reachGuardService.getConfiguration().getMode()
                 + " mode using "
                 + reachGuardService.getConfiguration().getPacketLibrary() + '.');
-        MessageService messageService = new MessageService(new MessageConfig(this));
+        MessageConfig messageConfig = new MessageConfig(this);
+        messageConfig.setLanguageService(languageService);
+        MessageService messageService = new MessageService(messageConfig);
         new ArenaWorldLayoutService(this).ensureLayout();
         new HitDebugRoomLayoutService(this).ensureLayout();
         arenaManager.load();
         lobbyService = new LobbyService(this, profileManager, resetService, scoreboardService);
+        lobbyService.setLanguageService(languageService);
+        settingsMenu.setOnLanguageChanged(lobbyService::giveLobbyItems);
+        kitLayoutService.setLanguageService(languageService);
         queueManager = new QueueManager(profileManager, kitManager, arenaManager,
                 messageService, lobbyService);
         matchService = new MatchService(this, profileManager, arenaManager, matchManager, kitManager,
@@ -159,15 +168,26 @@ public final class PracticePlugin extends JavaPlugin {
         queueManager.setMatchService(matchService);
         queueManager.setRatingService(ratingService);
         matchService.setRatingService(ratingService);
+        matchService.setLanguageService(languageService);
         matchService.setMatchFinishEffects(finishEffects);
         botService = new BotService(this, profileManager, arenaManager, kitManager,
                 queueManager, resetService, lobbyService, kitLayoutService, scoreboardService,
                 resultService, comboCombatService);
         botService.setComboFallController(comboFallController);
-        botService.setTierTestService(new TierTestService(getDataFolder(), ratingService, getLogger()));
+        botService.setLanguageService(languageService);
+        TierTestService tierTestService = new TierTestService(getDataFolder(), ratingService, getLogger());
+        tierTestService.setLanguageService(languageService);
+        botService.setTierTestService(tierTestService);
         botService.setMatchFinishEffects(finishEffects);
         tierMenu = new TierMenu(this, ratingService, profileManager, kitManager, botService);
+        tierMenu.setLanguageService(languageService);
         duelService = new DuelService(this, profileManager, kitManager, arenaManager, matchService);
+        duelService.setLanguageService(languageService);
+        spectatorService = new com.poppy.practice.spectator.SpectatorService(this, profileManager,
+                matchManager, botService, lobbyService, resetService, languageService);
+        matchService.setMatchEndObserver(spectatorService::handleMatchEnd);
+        botService.setMatchEndObserver(spectatorService::handleMatchEnd);
+        spectatorService.start();
         hitDebugRoomService = new HitDebugRoomService(this, profileManager, queueManager,
                 resetService, lobbyService, kitManager, kitLayoutService, damageDebugService,
                 scoreboardService);
@@ -191,6 +211,7 @@ public final class PracticePlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         CleanupTasks cleanup = new CleanupTasks(getLogger(), "Plugin shutdown");
+        if (spectatorService != null) cleanup.run("return spectators", spectatorService::shutdown);
         if (duelService != null) cleanup.run("clear duel invitations", duelService::shutdown);
         if (comboFallController != null) {
             cleanup.run("stop Combo fall control", comboFallController::shutdown);
@@ -325,20 +346,28 @@ public final class PracticePlugin extends JavaPlugin {
         PluginCommand elo = getCommand("elo");
         PluginCommand duel = getCommand("duel");
         PluginCommand settings = getCommand("settings");
+        PluginCommand spec = getCommand("spec");
         if (practice == null || queue == null || spawn == null || bot == null || ping == null
                 || matchResult == null || chatterKb == null || hitDebug == null
                 || reachGuard == null || comboKb == null || tier == null || elo == null
-                || duel == null || settings == null || tierReset == null) {
+                || duel == null || settings == null || tierReset == null
+                || spec == null) {
             throw new IllegalStateException("Commands are missing from plugin.yml");
         }
         PracticeCommand practiceCommand = new PracticeCommand(this, profileManager, queueManager, matchManager,
                 arenaManager, matchService, botService, latencyService, damageDebugService);
         practice.setExecutor(practiceCommand);
         practice.setTabCompleter(practiceCommand);
-        queue.setExecutor(new QueueCommand(queueManager));
-        spawn.setExecutor(new SpawnCommand(profileManager, queueManager, lobbyService,
-                messageService, hitDebugRoomService));
-        BotCommand botCommand = new BotCommand(botService);
+        queue.setExecutor(new QueueCommand(queueManager, languageService));
+        SpawnCommand spawnCommand = new SpawnCommand(profileManager, queueManager, lobbyService,
+                messageService, hitDebugRoomService);
+        spawnCommand.setSpectatorService(spectatorService);
+        spawn.setExecutor(spawnCommand);
+        com.poppy.practice.command.SpecCommand specCommand = new com.poppy.practice.command.SpecCommand(
+                spectatorService, languageService);
+        spec.setExecutor(specCommand);
+        spec.setTabCompleter(specCommand);
+        BotCommand botCommand = new BotCommand(botService, languageService);
         bot.setExecutor(botCommand);
         bot.setTabCompleter(botCommand);
         ping.setExecutor(pingCommand);
@@ -395,17 +424,23 @@ public final class PracticePlugin extends JavaPlugin {
                 lobbyService, botService, kitLayoutService);
         interactListener.setMenus(settingsMenu, tierMenu);
         interactListener.setRatingService(ratingService);
+        interactListener.setLanguageService(languageService);
         manager.registerEvents(interactListener, this);
         manager.registerEvents(settingsMenu, this);
         manager.registerEvents(tierMenu, this);
         manager.registerEvents(duelService, this);
         enderPearlListener = new EnderPearlCooldownListener(this, profileManager, matchManager, botService);
+        enderPearlListener.setLanguageService(languageService);
         manager.registerEvents(enderPearlListener, this);
         InventoryListener inventoryListener = new InventoryListener(this, profileManager, kitManager,
                 queueManager, messageService, botService, kitLayoutService, resultService);
         inventoryListener.setCertificationMenuOpener(tierMenu::open);
+        inventoryListener.setLanguageService(languageService);
         manager.registerEvents(inventoryListener, this);
-        manager.registerEvents(new PlayerMoveListener(profileManager), this);
+        PlayerMoveListener moveListener = new PlayerMoveListener(profileManager);
+        moveListener.setLanguageService(languageService);
+        manager.registerEvents(moveListener, this);
+        manager.registerEvents(new com.poppy.practice.spectator.SpectatorListener(spectatorService), this);
         manager.registerEvents(pingCommand, this);
         BotBoxingCombat botBoxingCombat = new BotBoxingCombat(botService, profileManager);
         manager.registerEvents(new CombatListener(profileManager, matchManager, matchService,

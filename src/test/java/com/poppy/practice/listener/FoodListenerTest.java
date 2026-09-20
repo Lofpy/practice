@@ -40,10 +40,10 @@ public final class FoodListenerTest {
     }
 
     @Test
-    public void noDebuffNpcWithoutPlayerProfileRetainsItsExistingHungerBehavior() {
+    public void noDebuffNpcWithoutPlayerProfileUsesNormalHunger() {
         BotMatch match = new BotMatch(UUID.randomUUID(), UUID.randomUUID(), "nodebuff", "arena");
         match.markFighting();
-        assertTrue(FoodListener.shouldKeepFullHunger(null, null, match));
+        assertFalse(FoodListener.shouldKeepFullHunger(null, null, match));
     }
 
     @Test

@@ -147,9 +147,11 @@ public final class MatchScoreboardService {
     }
 
     private void update(Display display, int onlinePlayers) {
-        String ownRating = display.match == null ? null
+        boolean ranked = display.match != null
+                && display.match.getType() == com.poppy.practice.match.MatchType.RANKED;
+        String ownRating = !ranked ? null
                 : ratingText(display.viewer.getUniqueId(), display.match.getKitId());
-        String otherRating = display.match == null || display.opponent == null ? null
+        String otherRating = !ranked || display.opponent == null ? null
                 : ratingText(display.opponent.getUniqueId(), display.match.getKitId());
         if (display.opponent == null) {
             UUID viewerId = display.viewer.getUniqueId();

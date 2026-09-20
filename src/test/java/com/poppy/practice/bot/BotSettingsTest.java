@@ -9,6 +9,15 @@ import static org.junit.Assert.assertTrue;
 
 public class BotSettingsTest {
     @Test
+    public void opponentHealingDefaultsTrueButExplicitChoiceIsPreserved() {
+        YamlConfiguration config = new YamlConfiguration();
+        assertTrue(BotSettings.load(config).canHealingPotionHealOpponent());
+        config.set("bot.healing.can-heal-opponent", false);
+        BotSettings.ensureManagedDefaults(config);
+        assertFalse(BotSettings.load(config).canHealingPotionHealOpponent());
+    }
+
+    @Test
     public void absentStrafeFlagKeepsTheExistingDefaultBehavior() {
         YamlConfiguration config = new YamlConfiguration();
 

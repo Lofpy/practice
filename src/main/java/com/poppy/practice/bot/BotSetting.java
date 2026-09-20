@@ -1,5 +1,7 @@
 package com.poppy.practice.bot;
 
+import com.poppy.practice.language.PlayerLanguage;
+
 import org.bukkit.Material;
 import org.bukkit.configuration.file.FileConfiguration;
 
@@ -83,7 +85,7 @@ public enum BotSetting {
             Material.IRON_BOOTS, "Healing: Emergency Retreat", "Retreat ticks during emergency healing.",
             0.0D, 0.0D, 100.0D, 1.0D, 5.0D, true),
     HEAL_OPPONENT("healing.can-heal-opponent", 44, Material.SPECKLED_MELON,
-            "Healing: Heal Opponent", "Allow bot potions to heal the opponent.", false);
+            "Healing: Heal Opponent", "Allow bot potions to heal the opponent.", true);
 
     private static final String ROOT = "bot.";
     private static final DecimalFormat NUMBER_FORMAT = new DecimalFormat("0.###");
@@ -142,6 +144,71 @@ public enum BotSetting {
     public Material getMaterial() { return material; }
     public String getDisplayName() { return displayName; }
     public String getDescription() { return description; }
+    public String getDisplayName(PlayerLanguage language) {
+        if (language == PlayerLanguage.ENGLISH) return getDisplayName();
+        switch (this) {
+            case COPY_PLAYER_SKIN: return "基本: プレイヤーのスキンを使用";
+            case MAXIMUM_HEALTH: return "基本: 最大体力";
+            case STRAFE_ENABLED: return "移動: 横移動";
+            case PREFERRED_DISTANCE: return "移動: 維持する距離";
+            case RETREAT_DISTANCE: return "移動: 後退する距離";
+            case STRAFE_INPUT: return "移動: 横移動の強さ";
+            case STRAFE_SWITCH_MINIMUM: return "移動: 横移動切替の最短tick";
+            case STRAFE_SWITCH_MAXIMUM: return "移動: 横移動切替の最長tick";
+            case MAXIMUM_YAW_CHANGE: return "エイム: 水平旋回速度";
+            case MAXIMUM_PITCH_CHANGE: return "エイム: 上下旋回速度";
+            case PREDICTION_TICKS: return "エイム: 予測tick";
+            case AIM_ERROR_DEGREES: return "エイム: 誤差角度";
+            case SWING_LEAD_DISTANCE: return "戦闘: 先行スイング距離";
+            case ATTACK_RANGE: return "戦闘: 攻撃距離";
+            case MINIMUM_CPS: return "戦闘: 最小CPS";
+            case MAXIMUM_CPS: return "戦闘: 最大CPS";
+            case SPRINT_RESET_TICKS: return "戦闘: スプリント解除tick";
+            case HEALING_ENABLED: return "回復: 有効";
+            case HEALING_HEALTH: return "回復: 開始体力";
+            case HEALING_COOLDOWN: return "回復: クールダウンtick";
+            case HEALING_POTION_COUNT: return "回復: ポーション数";
+            case HEALING_RETREAT_TICKS: return "回復: 後退tick";
+            case DOUBLE_POTION_HEALTH: return "回復: 2個使用する体力";
+            case EMERGENCY_UNANSWERED_HITS: return "回復: 緊急回復の連続被弾数";
+            case EMERGENCY_RETREAT_TICKS: return "回復: 緊急後退tick";
+            case HEAL_OPPONENT: return "回復: 相手も回復する";
+            default: return getDisplayName();
+        }
+    }
+
+    public String getDescription(PlayerLanguage language) {
+        if (language == PlayerLanguage.ENGLISH) return getDescription();
+        switch (this) {
+            case COPY_PLAYER_SKIN: return "Botにプレイヤーのスキンを使用します。";
+            case MAXIMUM_HEALTH: return "Botの最大体力（20 = ハート10個）。";
+            case STRAFE_ENABLED: return "戦闘中の横移動を許可します。";
+            case PREFERRED_DISTANCE: return "Botが維持しようとする距離。";
+            case RETREAT_DISTANCE: return "Botが後退を始める距離。";
+            case STRAFE_INPUT: return "横移動入力の強さ。";
+            case STRAFE_SWITCH_MINIMUM: return "横移動を切り替える最短間隔。";
+            case STRAFE_SWITCH_MAXIMUM: return "横移動を切り替える最長間隔。";
+            case MAXIMUM_YAW_CHANGE: return "接近中・回復中の水平方向の旋回速度。";
+            case MAXIMUM_PITCH_CHANGE: return "接近中・回復中の上下方向の旋回速度。";
+            case PREDICTION_TICKS: return "接近時の移動予測。近接時は相手を直視。";
+            case AIM_ERROR_DEGREES: return "接近時の照準誤差。近接時は相手を直視。";
+            case SWING_LEAD_DISTANCE: return "攻撃射程の手前でスイングを始める距離。";
+            case ATTACK_RANGE: return "近接攻撃の最大射程（ブロック）。";
+            case MINIMUM_CPS: return "1秒あたりの最小攻撃クリック数。";
+            case MAXIMUM_CPS: return "1秒あたりの最大攻撃クリック数。";
+            case SPRINT_RESET_TICKS: return "Wタップでスプリントを解除する時間。";
+            case HEALING_ENABLED: return "Botの回復ポーション使用を許可します。";
+            case HEALING_HEALTH: return "回復を開始する体力。";
+            case HEALING_COOLDOWN: return "回復行動の最短間隔。";
+            case HEALING_POTION_COUNT: return "Botの所持する回復ポーション数。";
+            case HEALING_RETREAT_TICKS: return "回復前に後退する時間。";
+            case DOUBLE_POTION_HEALTH: return "ポーションを2個使う体力。";
+            case EMERGENCY_UNANSWERED_HITS: return "緊急回復を始める一方的な連続被弾数。";
+            case EMERGENCY_RETREAT_TICKS: return "緊急回復時に後退する時間。";
+            case HEAL_OPPONENT: return "Botのポーションが相手も回復します。";
+            default: return getDescription();
+        }
+    }
     public boolean isBooleanSetting() { return booleanSetting; }
     public double getSmallStep() { return smallStep; }
     public double getLargeStep() { return largeStep; }

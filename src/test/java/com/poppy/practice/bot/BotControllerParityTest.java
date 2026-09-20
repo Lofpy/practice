@@ -1,9 +1,14 @@
 package com.poppy.practice.bot;
 
+import com.poppy.practice.result.MatchParticipantStats;
 import net.minecraft.server.v1_8_R3.Block;
+import net.minecraft.server.v1_8_R3.DispenserRegistry;
 import net.minecraft.server.v1_8_R3.EntityPlayer;
 import net.minecraft.server.v1_8_R3.IBlockData;
+import net.minecraft.server.v1_8_R3.ItemStack;
+import net.minecraft.server.v1_8_R3.Items;
 import net.minecraft.server.v1_8_R3.PacketPlayOutEntityVelocity;
+import net.minecraft.server.v1_8_R3.PlayerInventory;
 import net.minecraft.server.v1_8_R3.World;
 import net.minecraft.server.v1_8_R3.WorldServer;
 import org.bukkit.Bukkit;
@@ -41,6 +46,7 @@ public class BotControllerParityTest {
 
     @BeforeClass
     public static void initializeCraftEntityPermissions() throws Exception {
+        DispenserRegistry.c();
         serverField = Bukkit.class.getDeclaredField("server");
         serverField.setAccessible(true);
         previousServer = serverField.get(null);
@@ -337,6 +343,52 @@ public class BotControllerParityTest {
     }
 
     @Test
+    public void nonlethalSwordAttackStillStartsNativeBlockHit() throws Exception {
+        Fixture fixture = new Fixture(0);
+        ItemStack sword = new ItemStack(Items.DIAMOND_SWORD);
+        fixture.bot.inventory.setItem(0, sword);
+        fixture.setControllerField("botStats", new MatchParticipantStats());
+
+        fixture.controller.tick();
+
+        verify(fixture.bot).a(sword, sword.getItem().d(sword));
+    }
+
+    @Test
+    public void killingTheOpponentDoesNotStartAnotherBlockHitAfterEndingCleanup() throws Exception {
+        Fixture fixture = new Fixture(0);
+        fixture.bot.inventory.setItem(0, new ItemStack(Items.DIAMOND_SWORD));
+        fixture.setControllerField("botStats", new MatchParticipantStats());
+        doAnswer(invocation -> {
+            when(fixture.bukkitTarget.getHealth()).thenReturn(0.0D);
+            return null;
+        }).when(fixture.bot).attack(fixture.target);
+
+        fixture.controller.tick();
+
+        verify(fixture.bot).attack(fixture.target);
+        verify(fixture.bot, never()).a(any(ItemStack.class), anyInt());
+        assertEquals(0, fixture.getControllerField("blockHitTicks"));
+    }
+
+    @Test
+    public void botDeathDuringAnAttackDoesNotStartAnotherBlockHit() throws Exception {
+        Fixture fixture = new Fixture(0);
+        fixture.bot.inventory.setItem(0, new ItemStack(Items.DIAMOND_SWORD));
+        fixture.setControllerField("botStats", new MatchParticipantStats());
+        doAnswer(invocation -> {
+            when(fixture.bukkitBot.getHealth()).thenReturn(0.0D);
+            return null;
+        }).when(fixture.bot).attack(fixture.target);
+
+        fixture.controller.tick();
+
+        verify(fixture.bot).attack(fixture.target);
+        verify(fixture.bot, never()).a(any(ItemStack.class), anyInt());
+        assertEquals(0, fixture.getControllerField("blockHitTicks"));
+    }
+
+    @Test
     public void continuedBlockingUsesPlayerItemMovementPenaltyAndCannotSprint() throws Exception {
         Fixture fixture = new Fixture(0);
         fixture.blocking = true;
@@ -351,16 +403,16 @@ public class BotControllerParityTest {
     }
 
     @Test
-    public void weakSpacingInputDoesNotStartSprintOrApplySprintAttackSlowdown() throws Exception {
+    public void initialCloseEngagementHoldsForwardAndUsesNormalSprintAttackSlowdown() throws Exception {
         Fixture fixture = new Fixture(0);
         fixture.target.locZ = 2.0D;
 
         fixture.controller.tick();
 
-        assertEquals(0.28F, fixture.forwardInputs.get(0), 0.0F);
-        verify(fixture.bot, never()).setSprinting(true);
+        assertEquals(1.0F, fixture.forwardInputs.get(0), 0.0F);
+        verify(fixture.bot).setSprinting(true);
         verify(fixture.bot).attack(fixture.target);
-        fixture.assertClientMotion(0.80D, -0.40D);
+        fixture.assertClientMotion(0.48D, -0.24D);
     }
 
     @Test
@@ -388,6 +440,105 @@ public class BotControllerParityTest {
     }
 
     @Test
+    public void nodebuffApproachesNormallyBeforeAComboWithoutAnInfiniteSpeedBuff() throws Exception {
+        Fixture fixture = new Fixture(BotSettings.load(new YamlConfiguration()), "nodebuff");
+        fixture.target.locZ = 2.0D;
+        fixture.controller.tick();
+        assertEquals(1.0F, fixture.forwardInputs.get(0), 0.0F);
+        verify(fixture.bukkitBot, never()).addPotionEffect(any(PotionEffect.class), anyBoolean());
+        verify(fixture.bot).attack(fixture.target);
+    }
+
+    @Test
+    public void allKitsRequireTwoConfirmedHitsBeforeSpacing() throws Exception {
+        for (String kit : new String[] {"nodebuff", "boxing", "combo"}) {
+            Fixture fixture = new Fixture(BotSettings.load(new YamlConfiguration()), kit);
+            fixture.target.locZ = 1.4D;
+            fixture.setClientMotion(0.0D, 0.0D);
+            fixture.controller.tick();
+            assertEquals(1.0F, fixture.forwardInputs.get(0), 0.0F);
+            BotCertificationMovement movement = (BotCertificationMovement)
+                    fixture.getControllerField("practiceMovement");
+            movement.recordLandedHit();
+            fixture.controller.tick();
+            assertEquals(1.0F, fixture.forwardInputs.get(1), 0.0F);
+            movement.recordLandedHit();
+            fixture.controller.tick();
+            assertEquals(-0.62F, fixture.forwardInputs.get(2), 0.0F);
+        }
+    }
+
+    @Test
+    public void nodebuffDrinkingUsesNativeAnimationAndMovementPenaltyWithoutAttacking() throws Exception {
+        Fixture fixture = new Fixture(BotSettings.load(new YamlConfiguration()), "nodebuff");
+        ItemStack speed = new ItemStack(Items.POTION, 1, 8226);
+        fixture.bot.inventory.setItem(3, speed);
+        fixture.bot.yaw = -180.0F;
+        fixture.controller.tick();
+        verify(fixture.bot).a(speed, 32);
+        assertEquals(0.2F, fixture.forwardInputs.get(0), 0.0F);
+        assertEquals(3, fixture.bot.inventory.itemInHandIndex);
+        verify(fixture.bot, never()).attack(fixture.target);
+        verify(fixture.bot, never()).setSprinting(true);
+        verify(fixture.bot, times(1)).l();
+    }
+
+    @Test
+    public void nodebuffRefillRetreatsAndJumpsForTenTicksWithoutAttacking() throws Exception {
+        Fixture fixture = new Fixture(BotSettings.load(new YamlConfiguration()), "nodebuff");
+        fixture.bot.inventory.setItem(11, new ItemStack(Items.POTION, 1, 16421));
+        fixture.bot.yaw = -180.0F;
+        for (int tick = 0; tick < 9; tick++) {
+            fixture.controller.tick();
+            assertEquals(1, fixture.controller.getRemainingHealingPotions());
+            assertEquals(-1, ((BotNodebuffConsumables) fixture.getControllerField(
+                    "nodebuffConsumables")).healingSlot());
+        }
+        fixture.controller.tick();
+        assertNull(fixture.bot.inventory.getItem(11));
+        assertEquals(1, fixture.controller.getRemainingHealingPotions());
+        verify(fixture.bot, never()).attack(fixture.target);
+        verify(fixture.bot, times(10)).i(true);
+        verify(fixture.bot, times(10)).l();
+        for (Float forward : fixture.forwardInputs) assertEquals(1.0F, forward, 0.0F);
+    }
+
+    @Test
+    public void nodebuffHealingInterruptsDrinkingAndSelectsAnExistingHealingSlot() throws Exception {
+        Fixture fixture = new Fixture(BotSettings.load(new YamlConfiguration()), "nodebuff");
+        ItemStack speed = new ItemStack(Items.POTION, 1, 8226);
+        ItemStack healing = new ItemStack(Items.POTION, 1, 16421);
+        fixture.bot.inventory.setItem(3, speed);
+        fixture.bot.inventory.setItem(4, healing);
+        fixture.bot.yaw = -180.0F;
+        fixture.controller.tick();
+        when(fixture.bukkitBot.getHealth()).thenReturn(8.0D);
+        fixture.controller.tick();
+        verify(fixture.bot).bV();
+        assertEquals(4, fixture.bot.inventory.itemInHandIndex);
+        assertSame(speed, fixture.bot.inventory.getItem(3));
+        assertSame(healing, fixture.bot.inventory.getItem(4));
+        assertEquals(1, fixture.controller.getRemainingHealingPotions());
+        verify(fixture.bot, times(1)).a(speed, 32);
+        verify(fixture.bot, never()).attack(fixture.target);
+    }
+
+    @Test
+    public void receivedHitClearsNodebuffComboEvenIfAnsweredBeforeTheNextTick() throws Exception {
+        Fixture fixture = new Fixture(BotSettings.load(new YamlConfiguration()), "nodebuff");
+        fixture.target.locZ = 1.4D;
+        BotCertificationMovement movement = (BotCertificationMovement)
+                fixture.getControllerField("practiceMovement");
+        movement.recordLandedHit();
+        movement.recordLandedHit();
+        fixture.npc.recordMeleeHit();
+        fixture.npc.recordMeleeHitLanded();
+        fixture.controller.tick();
+        assertEquals(1.0F, fixture.forwardInputs.get(0), 0.0F);
+        assertFalse(movement.isComboSpacing());
+    }
+
+    @Test
     public void certificationKeepsOnlyWeakStrafeBetweenEngagements() throws Exception {
         Fixture fixture = new Fixture(BotSettings.certificationPreset());
         fixture.setControllerField("strafeDirection", 1);
@@ -405,6 +556,8 @@ public class BotControllerParityTest {
     @Test
     public void certificationBacksAwayWhileKeepingItsEyesOnTheOpponent() throws Exception {
         Fixture fixture = new Fixture(BotSettings.certificationPreset());
+        fixture.certificationMovement().recordLandedHit();
+        fixture.certificationMovement().recordLandedHit();
         fixture.target.locZ = 1.8D;
 
         fixture.controller.tick();
@@ -420,6 +573,8 @@ public class BotControllerParityTest {
     @Test
     public void certificationPredictionReadsClientMomentumNotServerKbBaseline() throws Exception {
         Fixture fixture = new Fixture(BotSettings.certificationPreset());
+        fixture.certificationMovement().recordLandedHit();
+        fixture.certificationMovement().recordLandedHit();
         fixture.target.locZ = 2.55D;
         fixture.setClientMotion(0.0D, 0.20D);
         // The bot's actual client is closing the gap, while server KB points away.
@@ -435,6 +590,8 @@ public class BotControllerParityTest {
     @Test
     public void certificationImmediatelyPursuesAnOpponentWhoLeavesItsSpacingBand() throws Exception {
         Fixture fixture = new Fixture(BotSettings.certificationPreset());
+        fixture.certificationMovement().recordLandedHit();
+        fixture.certificationMovement().recordLandedHit();
         fixture.setClientMotion(0.0D, 0.0D);
         fixture.target.locZ = 2.2D;
         fixture.controller.tick();
@@ -478,8 +635,9 @@ public class BotControllerParityTest {
     }
 
     @Test
-    public void certificationLandedHitImmediatelyStopsStrafeAndRetainsOneTickWReset() throws Exception {
+    public void certificationSecondLandedHitStopsStrafeAndRetainsOneTickWReset() throws Exception {
         Fixture fixture = new Fixture(BotSettings.certificationPreset());
+        fixture.certificationMovement().recordLandedHit();
         fixture.acceptDamage = true;
         fixture.controller.tick();
         assertEquals(0.0F, fixture.bot.aZ, 0.0F);
@@ -502,8 +660,9 @@ public class BotControllerParityTest {
     }
 
     @Test
-    public void certificationLandedHitHoldsSpacingAfterTheOneTickWResetHasFinished() throws Exception {
+    public void certificationSecondLandedHitHoldsSpacingAfterTheOneTickWResetHasFinished() throws Exception {
         Fixture fixture = new Fixture(BotSettings.certificationPreset());
+        fixture.certificationMovement().recordLandedHit();
         fixture.setClientMotion(0.0D, 0.0D);
         fixture.target.locZ = 2.55D;
         fixture.acceptDamage = true;
@@ -512,7 +671,7 @@ public class BotControllerParityTest {
         fixture.controller.tick();
         fixture.controller.tick();
 
-        assertEquals(0.28F, fixture.forwardInputs.get(0), 0.0F);
+        assertEquals(1.0F, fixture.forwardInputs.get(0), 0.0F);
         assertEquals(0.0F, fixture.forwardInputs.get(1), 0.0F);
         assertEquals(0.0F, fixture.forwardInputs.get(2), 0.0F);
         assertEquals(0.0F, fixture.bot.aZ, 0.0F);
@@ -573,7 +732,7 @@ public class BotControllerParityTest {
         assertEquals(-180.0F, fixture.bot.yaw, 0.00001F);
         assertEquals(1.0F, fixture.forwardInputs.get(0), 0.0F);
         assertEquals(0.0F, fixture.bot.aZ, 0.0F);
-        assertEquals(0.28F, movement.forwardInput(2.4D, 0.0D, false, false), 0.0F);
+        assertEquals(1.0F, movement.forwardInput(2.4D, 0.0D, false, false), 0.0F);
         assertEquals(0.18F, movement.strafeInput(0.18D, 1, false, 0.28F), 0.0F);
         assertFalse((Boolean) fixture.getControllerField("directCombatFacing"));
         verify(fixture.bot, never()).attack(fixture.target);
@@ -589,7 +748,7 @@ public class BotControllerParityTest {
 
         fixture.controller.tick();
 
-        assertEquals(0.28F, movement.forwardInput(2.4D, 0.0D, false, false), 0.0F);
+        assertEquals(1.0F, movement.forwardInput(2.4D, 0.0D, false, false), 0.0F);
         assertEquals(0.18F, movement.strafeInput(0.18D, 1, false, 0.28F), 0.0F);
         assertFalse((Boolean) fixture.getControllerField("directCombatFacing"));
         verify(fixture.bot, never()).attack(fixture.target);
@@ -787,6 +946,7 @@ public class BotControllerParityTest {
         private boolean acceptDamage;
         private boolean nativeSprinting;
         private boolean blocking;
+        private boolean using;
 
         private Fixture(int resetTicks) throws Exception {
             this(resetTicks, config -> { });
@@ -797,14 +957,21 @@ public class BotControllerParityTest {
         }
 
         private Fixture(BotSettings settings) throws Exception {
+            this(settings, "boxing");
+        }
+
+        private Fixture(BotSettings settings, String kitId) throws Exception {
             IBlockData ground = mock(IBlockData.class);
             Block block = mock(Block.class);
             block.frictionFactor = 0.6F;
             when(ground.getBlock()).thenReturn(block);
             when(world.getType(anyInt(), anyInt(), anyInt())).thenReturn(ground);
             bot.world = world;
+            bot.inventory = new PlayerInventory(bot);
             when(bot.getBukkitEntity()).thenReturn(bukkitBot);
+            when(target.getBukkitEntity()).thenReturn(bukkitTarget);
             when(bukkitTarget.getHandle()).thenReturn(target);
+            when(bukkitTarget.getHealth()).thenReturn(20.0D);
             when(bukkitBot.getFoodLevel()).thenReturn(20);
             when(bukkitBot.getActivePotionEffects()).thenReturn(Collections.singletonList(
                     new PotionEffect(PotionEffectType.SPEED, Integer.MAX_VALUE, 1)));
@@ -814,8 +981,14 @@ public class BotControllerParityTest {
             when(bot.hasLineOfSight(target)).thenReturn(true);
             when(bot.isSprinting()).thenAnswer(invocation -> nativeSprinting);
             when(bot.isBlocking()).thenAnswer(invocation -> blocking);
+            when(bot.bS()).thenAnswer(invocation -> using || blocking);
+            doAnswer(invocation -> {
+                using = true;
+                return null;
+            }).when(bot).a(any(ItemStack.class), anyInt());
             doAnswer(invocation -> {
                 blocking = false;
+                using = false;
                 return null;
             }).when(bot).bV();
             doAnswer(invocation -> {
@@ -862,7 +1035,7 @@ public class BotControllerParityTest {
                 return null;
             }).when(bot).l();
 
-            controller = new BotController(npc, bukkitTarget, settings, null, false);
+            controller = new BotController(npc, bukkitTarget, settings, null, kitId);
         }
 
         private static BotSettings practiceSettings(int resetTicks,

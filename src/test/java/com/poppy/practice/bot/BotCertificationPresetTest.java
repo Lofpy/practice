@@ -27,7 +27,7 @@ public class BotCertificationPresetTest {
         assertTrue(placement.isStrafeEnabled());
         assertEquals(3.0, placement.getAttackRange(), 0);
         assertEquals(0, placement.getHealingRetreatBeforeThrowTicks());
-        assertFalse(placement.canHealingPotionHealOpponent());
+        assertTrue(placement.canHealingPotionHealOpponent());
         global.set("bot.combat.minimum-cps", 20);
         assertEquals(16.8, placement.getMinimumCps(), 0);
         assertNotSame(placement, BotSettings.certificationPreset());

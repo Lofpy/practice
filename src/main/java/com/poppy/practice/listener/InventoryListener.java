@@ -47,6 +47,11 @@ public final class InventoryListener implements Listener {
     private final MatchResultService resultService;
     private final RefilledPotionUseGuard refilledPotionUseGuard = new RefilledPotionUseGuard();
     private java.util.function.Consumer<Player> certificationMenuOpener;
+    private com.poppy.practice.language.LanguageService languages;
+
+    public void setLanguageService(com.poppy.practice.language.LanguageService languages) {
+        this.languages = languages;
+    }
 
     public void setCertificationMenuOpener(java.util.function.Consumer<Player> opener) {
         this.certificationMenuOpener = opener;
@@ -152,8 +157,9 @@ public final class InventoryListener implements Listener {
                 }
                 botService.resetSettings();
                 botService.refreshSettings(top);
-                player.sendMessage(org.bukkit.ChatColor.GREEN
-                        + "Shared bot settings reset to their original defaults.");
+                String japanese = "共有Bot設定をデフォルトに戻しました。";
+                player.sendMessage(org.bukkit.ChatColor.RED + (languages == null ? japanese : languages.text(player,
+                        japanese, "Shared bot settings reset to their original defaults.")));
                 return;
             }
             BotSetting setting = menu.getEditableSetting(rawSlot);

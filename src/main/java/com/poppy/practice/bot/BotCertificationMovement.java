@@ -1,8 +1,9 @@
 package com.poppy.practice.bot;
 
-/** Certification-only movement inputs; never changes velocity, reach or damage. */
+/** Confirmed-combo spacing inputs; never changes velocity, reach or damage. */
 final class BotCertificationMovement {
     private static final int COMBO_WINDOW_TICKS = 8;
+    private static final int HIT_CHAIN_WINDOW_TICKS = 16;
     private static final double PREDICTION_TICKS = 2.0D;
     private static final double MAXIMUM_PREDICTED_CHANGE = 0.45D;
     private static final double BACKWARD_RELEASE_MARGIN = 0.15D;
@@ -10,6 +11,8 @@ final class BotCertificationMovement {
     private final double preferredDistance;
     private final double retreatDistance;
     private int comboTicks;
+    private int hitChainTicks;
+    private int consecutiveHits;
     private boolean backingOff;
 
     BotCertificationMovement(BotSettings settings) {
@@ -21,15 +24,26 @@ final class BotCertificationMovement {
         if (comboTicks > 0) {
             comboTicks--;
         }
+        if (hitChainTicks > 0 && --hitChainTicks == 0) {
+            consecutiveHits = 0;
+        }
     }
 
     void recordLandedHit() {
-        comboTicks = COMBO_WINDOW_TICKS;
+        consecutiveHits++;
+        hitChainTicks = HIT_CHAIN_WINDOW_TICKS;
+        if (consecutiveHits >= 2) comboTicks = COMBO_WINDOW_TICKS;
     }
 
     void suspend() {
         backingOff = false;
         comboTicks = 0;
+        hitChainTicks = 0;
+        consecutiveHits = 0;
+    }
+
+    boolean isComboSpacing() {
+        return comboTicks > 0;
     }
 
     /** relativeSpeed is positive when the horizontal gap is opening. */
@@ -37,7 +51,11 @@ final class BotCertificationMovement {
                        boolean targetFacingAway, boolean takingKnockback) {
         // Keep chasing a fleeing opponent and counter received KB with W.
         // In particular, never add a scripted retreat to received knockback.
-        if (targetFacingAway || takingKnockback) {
+        if (takingKnockback) {
+            suspend();
+            return 1.0F;
+        }
+        if (targetFacingAway || comboTicks == 0) {
             backingOff = false;
             return 1.0F;
         }

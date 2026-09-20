@@ -7,6 +7,7 @@ import com.poppy.practice.arena.ArenaState;
 import com.poppy.practice.kit.Kit;
 import com.poppy.practice.kit.KitManager;
 import com.poppy.practice.kit.KitLayoutService;
+import com.poppy.practice.language.LanguageService;
 import com.poppy.practice.combat.ComboCombatService;
 import com.poppy.practice.match.ComboRules;
 import com.poppy.practice.match.BoxingRules;
@@ -56,10 +57,16 @@ public final class MatchService {
     private boolean shuttingDown;
     private RatingService ratings;
     private MatchFinishEffects finishEffects;
+    private LanguageService languages;
+    private java.util.function.Consumer<UUID> matchEndObserver = id -> { };
     private final Map<UUID, BukkitTask> endingTasks = new HashMap<UUID, BukkitTask>();
 
     public void setRatingService(RatingService ratings) { this.ratings = ratings; }
+    public void setLanguageService(LanguageService languages) { this.languages = languages; }
     public void setMatchFinishEffects(MatchFinishEffects effects) { this.finishEffects = effects; }
+    public void setMatchEndObserver(java.util.function.Consumer<UUID> observer) {
+        matchEndObserver = observer == null ? id -> { } : observer;
+    }
 
     public MatchService(PracticePlugin plugin, ProfileManager profileManager, ArenaManager arenaManager,
                         MatchManager matchManager, KitManager kitManager, QueueManager queueManager,
@@ -158,16 +165,18 @@ public final class MatchService {
             }
             scoreboardService.show(first, second, match);
             scoreboardService.show(second, first, match);
-            first.sendMessage(ChatColor.GRAY + "Matched against " + ChatColor.WHITE + second.getName());
-            second.sendMessage(ChatColor.GRAY + "Matched against " + ChatColor.WHITE + first.getName());
-            sendToMatch(match, type == MatchType.DUEL ? ChatColor.AQUA + "Duel: ELO does not change."
-                    : ChatColor.GOLD + "Ranked " + kit.getDisplayName());
+            send(first, ChatColor.GRAY + "対戦相手: " + ChatColor.WHITE + second.getName(),
+                    ChatColor.GRAY + "Matched against " + ChatColor.WHITE + second.getName());
+            send(second, ChatColor.GRAY + "対戦相手: " + ChatColor.WHITE + first.getName(),
+                    ChatColor.GRAY + "Matched against " + ChatColor.WHITE + first.getName());
+            sendToMatch(match, ChatColor.RED + (type == MatchType.DUEL ? "Duel: " : "ランク戦: ") + kit.getDisplayName(),
+                    ChatColor.RED + (type == MatchType.DUEL ? "Duel: " : "Ranked: ") + kit.getDisplayName());
             if (BoxingRules.isBoxing(kitId)) {
-                sendToMatch(match, ChatColor.YELLOW + "Boxing: first to "
-                        + BoxingRules.HITS_TO_WIN + " hits wins. No health or hunger loss.");
+                sendToMatch(match, ChatColor.GRAY + "Boxing: " + BoxingRules.HITS_TO_WIN + "ヒット先取。体力と空腹度は減りません。",
+                        ChatColor.GRAY + "Boxing: first to " + BoxingRules.HITS_TO_WIN + " hits wins. No health or hunger loss.");
             } else if (ComboRules.isCombo(kitId)) {
-                sendToMatch(match, ChatColor.YELLOW
-                        + "Combo: independent knockback and hit delay. Ender pearls: 8s cooldown.");
+                sendToMatch(match, ChatColor.GRAY + "Combo: 専用KB・無敵時間を使用。パールのクールダウンは8秒です。",
+                        ChatColor.GRAY + "Combo: independent knockback and hit delay. Ender pearls: 8s cooldown.");
             }
             startCountdown(match);
             started = true;
@@ -366,6 +375,9 @@ public final class MatchService {
     private void finishEnding(Match match) {
         BukkitTask task = endingTasks.remove(match.getId());
         try {
+            // Return observers while participants/NPCs still belong to this match.
+            new CleanupTasks(plugin.getLogger(), "Match observers").run(
+                    "return spectators", () -> matchEndObserver.accept(match.getId()));
             if (task != null) task.cancel();
         } catch (RuntimeException failure) {
             plugin.getLogger().log(Level.WARNING, "Could not cancel ending task for " + match.getId(), failure);
@@ -378,17 +390,24 @@ public final class MatchService {
         if (ratings == null || match.getType() != MatchType.RANKED || match.getStartedAt() <= 0
                 || !validResultParticipants(match, winner, loser) || !(reason == MatchEndReason.DEATH
                 || reason == MatchEndReason.HIT_LIMIT || reason == MatchEndReason.QUIT)) return;
+        RatingChange change;
         try {
-            RatingChange change = ratings.recordRankedWin(match.getId(), match.getKitId(), winner, loser);
-            if (change == null) return;
+            change = ratings.recordRankedWin(match.getId(), match.getKitId(), winner, loser);
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Rating persistence failed for match " + match.getId(), exception);
+            sendToMatch(match, ChatColor.RED + "ELOを保存できませんでした。管理者に連絡してください。",
+                    ChatColor.RED + "ELO could not be saved. Please contact an administrator.");
+            return;
+        }
+        if (change == null) return;
+        try {
             sendToMatch(match, ChatColor.GOLD + "ELO [" + match.getKitId() + "] " + playerName(winner)
                     + ": " + RatingService.format(change.getWinnerAfterMilli()) + " (+"
                     + RatingService.format(change.getWinnerDeltaMilli()) + ") | " + playerName(loser)
                     + ": " + RatingService.format(change.getLoserAfterMilli()) + " ("
                     + RatingService.format(change.getLoserDeltaMilli()) + ")");
         } catch (RuntimeException exception) {
-            plugin.getLogger().log(Level.SEVERE, "Rating persistence failed for match " + match.getId(), exception);
-            sendToMatch(match, ChatColor.RED + "ELO could not be saved. Please contact an administrator.");
+            plugin.getLogger().log(Level.WARNING, "Could not display committed ELO for match " + match.getId(), exception);
         }
     }
 
@@ -464,6 +483,17 @@ public final class MatchService {
         }
         if (second != null) {
             second.sendMessage(message);
+        }
+    }
+
+    private void sendToMatch(Match match, String japanese, String english) {
+        send(Bukkit.getPlayer(match.getFirstPlayerId()), japanese, english);
+        send(Bukkit.getPlayer(match.getSecondPlayerId()), japanese, english);
+    }
+
+    private void send(Player player, String japanese, String english) {
+        if (player != null && player.isOnline()) {
+            player.sendMessage(languages == null ? japanese : languages.text(player, japanese, english));
         }
     }
 

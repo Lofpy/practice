@@ -8,6 +8,9 @@ import com.poppy.practice.player.PlayerProfile;
 import com.poppy.practice.player.PlayerState;
 import com.poppy.practice.player.ProfileManager;
 import com.poppy.practice.ui.KitSelectionMenu;
+import com.poppy.practice.cosmetic.PreferencesService;
+import com.poppy.practice.language.LanguageService;
+import com.poppy.practice.language.PlayerLanguage;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Server;
@@ -22,17 +25,21 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.Rule;
+import org.junit.rules.TemporaryFolder;
 import org.objenesis.ObjenesisStd;
 
 import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.UUID;
+import java.util.logging.Logger;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 /** Real setup entrypoints with headless inventories; no arenas or NPCs are created. */
 public class BotSetupFlowTest {
+    @Rule public TemporaryFolder temporary = new TemporaryFolder();
     private static Field serverField;
     private static Object previousServer;
 
@@ -152,7 +159,7 @@ public class BotSetupFlowTest {
         assertEquals("boxing", ((BotSettingsMenu) second.opened.getHolder()).getKitId());
         assertEquals("combo", ((BotSettingsMenu) third.opened.getHolder()).getKitId());
         assertEquals(Material.GOLDEN_APPLE, third.opened.getItem(4).getType());
-        assertTrue(third.opened.getItem(49).getItemMeta().getDisplayName().contains("Start Combo"));
+        assertTrue(third.opened.getItem(49).getItemMeta().getDisplayName().contains("Combo Bot対戦を開始"));
         assertEquals(Material.STAINED_GLASS_PANE,
                 third.opened.getItem(BotSetting.HEALING_ENABLED.getSlot()).getType());
         assertFalse(first.config.getBoolean("bot.movement.strafe-enabled"));
@@ -177,8 +184,8 @@ public class BotSetupFlowTest {
                 ItemStack item = fixture.opened.getItem(setting.getSlot());
                 assertEquals(Material.STAINED_GLASS_PANE, item.getType());
                 assertEquals(7, item.getDurability());
-                assertTrue(item.getItemMeta().getLore().toString().contains("Not used in Combo"));
-                assertTrue(item.getItemMeta().getLore().toString().contains("enchanted golden apples"));
+                assertTrue(item.getItemMeta().getLore().toString().contains("Combo では使用しません"));
+                assertTrue(item.getItemMeta().getLore().toString().contains("金リンゴ"));
                 assertNull(menu.getEditableSetting(setting.getSlot()));
             } else {
                 assertEquals(setting, menu.getEditableSetting(setting.getSlot()));
@@ -186,6 +193,22 @@ public class BotSetupFlowTest {
         }
         assertEquals(before, fixture.config.saveToString());
         fixture.assertProfileUnchanged(PlayerState.LOBBY);
+    }
+
+    @Test public void savedEnglishLocaleAppliesToBothBotSetupStepsWhileDefaultRemainsJapanese() throws Exception {
+        Fixture fixture = new Fixture();
+        PreferencesService preferences = new PreferencesService(temporary.getRoot(), Logger.getAnonymousLogger());
+        fixture.service.setLanguageService(new LanguageService(preferences));
+        fixture.service.openSettings(fixture.player);
+        assertTrue(fixture.opened.getTitle().contains("キット選択"));
+        assertTrue(preferences.setLanguage(fixture.player.getUniqueId(), PlayerLanguage.ENGLISH));
+        fixture.service.openSettings(fixture.player);
+        assertEquals("Bot Fight | Select a Kit", fixture.opened.getTitle());
+        fixture.service.openSettings(fixture.player, "combo");
+        assertEquals("Bot Settings | Combo", fixture.opened.getTitle());
+        assertTrue(fixture.opened.getItem(49).getItemMeta().getDisplayName().contains("Start Combo"));
+        assertTrue(fixture.opened.getItem(BotSetting.HEALING_ENABLED.getSlot())
+                .getItemMeta().getLore().toString().contains("Not used in Combo"));
     }
 
     @Test

@@ -1,6 +1,8 @@
 package com.poppy.practice.command;
 
 import com.poppy.practice.bot.BotService;
+import com.poppy.practice.language.LanguageService;
+import com.poppy.practice.language.PlayerLanguage;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -17,9 +19,14 @@ public final class BotCommand implements CommandExecutor, TabCompleter {
     private static final List<String> ROOT_ARGUMENTS =
             Arrays.asList("start", "settings", "leave");
     private final BotService botService;
+    private final LanguageService languages;
 
     public BotCommand(BotService botService) {
+        this(botService, null);
+    }
+    public BotCommand(BotService botService, LanguageService languages) {
         this.botService = botService;
+        this.languages = languages;
     }
 
     @Override
@@ -29,6 +36,7 @@ public final class BotCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         Player player = (Player) sender;
+        PlayerLanguage language = languages == null ? PlayerLanguage.JAPANESE : languages.language(player);
         if (args.length == 0 || (args.length == 1
                 && (args[0].equalsIgnoreCase("start")
                 || args[0].equalsIgnoreCase("settings")))) {
@@ -38,11 +46,11 @@ public final class BotCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1 && (args[0].equalsIgnoreCase("leave")
                 || args[0].equalsIgnoreCase("stop"))) {
             if (!botService.forceStop(player.getUniqueId())) {
-                player.sendMessage(ChatColor.RED + "You are not in a bot match.");
+                player.sendMessage(ChatColor.RED + language.choose("Bot対戦中ではありません。", "You are not in a bot match."));
             }
             return true;
         }
-        player.sendMessage(ChatColor.RED + "Usage: /bot [start|settings|leave]");
+        player.sendMessage(ChatColor.RED + language.choose("使い方: ", "Usage: ") + "/bot [start|settings|leave]");
         return true;
     }
 

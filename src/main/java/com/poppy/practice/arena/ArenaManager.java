@@ -29,7 +29,13 @@ public final class ArenaManager {
     }
 
     public void release(String arenaId) {
-        arenas.release(arenaId);
+        Arena arena = arenas.get(arenaId);
+        if (arena == null || arena.getState() != ArenaState.IN_USE) return;
+        try {
+            ArenaItemCleanup.clear(arena);
+        } finally {
+            arenas.release(arenaId);
+        }
     }
 
     public Arena get(String arenaId) {

@@ -234,7 +234,7 @@ bot:
     emergency-unanswered-hits: 2
     emergency-retreat-before-throw-ticks: 0
     retreat-before-throw-ticks: 0
-    can-heal-opponent: false
+    can-heal-opponent: true
 
 # Splash potion trajectory. x-speed controls both horizontal (X/Z)
 # velocity components; y-speed controls the vertical component.

@@ -17,6 +17,16 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public final class PracticeSidebarTest {
+    @Test public void brandingIsRedAndScoreboardLabelsStayEnglish() {
+        Board board = new Board();
+        PracticeSidebar sidebar = new PracticeSidebar(board.scoreboard);
+        sidebar.showLobby(1, PracticeSidebar.placementText(0), PracticeSidebar.placementText(0), PracticeSidebar.placementText(0));
+        assertEquals(ChatColor.RED.toString() + ChatColor.BOLD + "AscendingMC Practice", board.title);
+        assertEquals(ChatColor.WHITE + "Your Ping: ", board.prefixes.get("self_ping"));
+        assertEquals(ChatColor.WHITE + "Online: ", board.prefixes.get("online"));
+        assertEquals(ChatColor.YELLOW + "Tier 0/3", board.suffixes.get("nodebuff_rating"));
+    }
+
     @Test
     public void boxingDisplaysHitsDifferenceAndPingWithoutResendingUnchangedLines() {
         Board board = new Board();
@@ -137,7 +147,7 @@ public final class PracticeSidebarTest {
         sidebar.showLobby(5, PracticeSidebar.ratingText(1650123L),
                 PracticeSidebar.placementText(2), PracticeSidebar.placementText(0));
         assertEquals(6, board.entries.size());
-        assertEquals(ChatColor.AQUA + "1650.123", board.suffixes.get("nodebuff_rating"));
+        assertEquals(ChatColor.RED + "1650.123", board.suffixes.get("nodebuff_rating"));
         assertEquals(ChatColor.YELLOW + "Tier 2/3", board.suffixes.get("boxing_rating"));
         assertEquals(ChatColor.YELLOW + "Tier 0/3", board.suffixes.get("combo_rating"));
         assertEquals(ChatColor.WHITE + "Online: ", board.prefixes.get("online"));
@@ -155,8 +165,8 @@ public final class PracticeSidebarTest {
         sidebar.showBoxing(25, 75, 42, 30, PracticeSidebar.ratingText(1650000L),
                 PracticeSidebar.ratingText(1700000L));
         assertEquals(9, board.entries.size());
-        assertEquals(ChatColor.AQUA + "1650.000", board.suffixes.get("self_rating"));
-        assertEquals(ChatColor.AQUA + "1700.000", board.suffixes.get("opponent_rating"));
+        assertEquals(ChatColor.RED + "1650.000", board.suffixes.get("self_rating"));
+        assertEquals(ChatColor.RED + "1700.000", board.suffixes.get("opponent_rating"));
         assertEquals(ChatColor.GREEN + "42/100", board.suffixes.get("self_hits"));
         assertEquals(ChatColor.GREEN + "25ms", board.suffixes.get("self_ping"));
         int suffixWrites = board.suffixWrites;
@@ -188,7 +198,7 @@ public final class PracticeSidebarTest {
     }
 
     @Test public void ratingAndPlacementTextFitLegacyFieldsEvenAtExtremeValues() {
-        assertEquals(ChatColor.AQUA + "1500.000", PracticeSidebar.ratingText(1500000L));
+        assertEquals(ChatColor.RED + "1500.000", PracticeSidebar.ratingText(1500000L));
         assertTrue(PracticeSidebar.ratingText(Long.MAX_VALUE).length() <= 16);
         assertEquals(ChatColor.YELLOW + "Tier 0/3", PracticeSidebar.placementText(-1));
         assertEquals(ChatColor.YELLOW + "Tier 3/3", PracticeSidebar.placementText(Integer.MAX_VALUE));
@@ -204,7 +214,9 @@ public final class PracticeSidebarTest {
         private int suffixWrites;
         private int scoreWrites;
         private int objectiveRegistrations;
+        private String title;
         private final Objective objective = proxy(Objective.class, (instance, method, args) -> {
+            if ("setDisplayName".equals(method.getName())) { title = (String) args[0]; }
             if ("getScore".equals(method.getName())) {
                 String entry = (String) args[0];
                 return proxy(Score.class, (score, operation, values) -> {

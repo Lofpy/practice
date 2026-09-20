@@ -1,5 +1,6 @@
 package com.poppy.practice.cosmetic;
 
+import com.poppy.practice.language.PlayerLanguage;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
@@ -21,6 +22,7 @@ public final class PreferencesService {
     private final Logger logger;
     private final Thread ownerThread;
     private final Map<UUID, KillEffect> effects = new HashMap<UUID, KillEffect>();
+    private final Map<UUID, PlayerLanguage> languages = new HashMap<UUID, PlayerLanguage>();
     private YamlConfiguration document = new YamlConfiguration();
     private boolean writable = true;
 
@@ -59,6 +61,36 @@ public final class PreferencesService {
         }
     }
 
+    public PlayerLanguage getLanguage(UUID playerId) {
+        requireOwnerThread();
+        PlayerLanguage language = languages.get(playerId);
+        return language == null ? PlayerLanguage.JAPANESE : language;
+    }
+
+    public boolean setLanguage(UUID playerId, PlayerLanguage language) {
+        requireOwnerThread();
+        if (playerId == null || language == null) throw new IllegalArgumentException("Missing player or language");
+        if (!writable) return false;
+        if (language == languages.get(playerId)) return true;
+        try {
+            YamlConfiguration candidate = new YamlConfiguration();
+            candidate.loadFromString(document.saveToString());
+            candidate.set("version", 1);
+            String entry = "players." + playerId;
+            // Retain the existing snapshot schema, including a kill effect for locale-only users.
+            candidate.set(entry + ".kill-effect", getKillEffect(playerId).name());
+            candidate.set(entry + ".locale", language.getCode());
+            save(candidate.saveToString());
+            document = candidate;
+            languages.put(playerId, language);
+            return true;
+        } catch (Exception error) {
+            logger.log(Level.SEVERE, "Could not save language for " + playerId
+                    + "; the previous selection was retained.", error);
+            return false;
+        }
+    }
+
     public boolean isWritable() {
         requireOwnerThread();
         return writable;
@@ -78,6 +110,7 @@ public final class PreferencesService {
                 throw new IOException("players must be a section");
             }
             Map<UUID, KillEffect> loadedEffects = new HashMap<UUID, KillEffect>();
+            Map<UUID, PlayerLanguage> loadedLanguages = new HashMap<UUID, PlayerLanguage>();
             if (players != null) {
                 for (String key : players.getKeys(false)) {
                     UUID playerId = UUID.fromString(key);
@@ -87,10 +120,15 @@ public final class PreferencesService {
                         throw new IOException("Missing kill-effect for " + key);
                     }
                     loadedEffects.put(playerId, KillEffect.valueOf(entry.getString("kill-effect")));
+                    if (entry.contains("locale")) {
+                        if (!entry.isString("locale")) throw new IOException("Invalid locale for " + key);
+                        loadedLanguages.put(playerId, PlayerLanguage.fromCode(entry.getString("locale")));
+                    }
                 }
             }
             document = loaded;
             effects.putAll(loadedEffects);
+            languages.putAll(loadedLanguages);
         } catch (Exception error) {
             writable = false;
             logger.log(Level.SEVERE, "Cannot load " + file

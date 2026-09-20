@@ -3,7 +3,7 @@ version: 0.1.0
 main: com.poppy.lobby.PoppyLobbyPlugin
 load: STARTUP
 description: Protected standalone lobby and practice server selector.
-author: Poppy
+author: AscendingMC
 commands:
   hub:
     description: Return to the network lobby.

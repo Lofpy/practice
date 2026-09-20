@@ -102,7 +102,6 @@ public final class CombatListener implements Listener {
         if (fallDamage) {
             reportDamage(match, victim, event);
             if (!event.isCancelled() && event.getFinalDamage() >= victim.getHealth()) {
-                event.setCancelled(true);
                 matchService.handleDeath(victim);
             }
             return;
@@ -128,7 +127,6 @@ public final class CombatListener implements Listener {
         }
         reportDamage(match, victim, event);
         if (!event.isCancelled() && event.getFinalDamage() >= victim.getHealth()) {
-            event.setCancelled(true);
             matchService.handleDeath(victim);
         }
     }
@@ -217,7 +215,6 @@ public final class CombatListener implements Listener {
         if (fallDamage) {
             reportDamage(match, victim, event);
             if (!event.isCancelled() && event.getFinalDamage() >= victim.getHealth()) {
-                event.setCancelled(true);
                 botService.handlePlayerDefeat(victim.getUniqueId());
             }
             return;
@@ -240,7 +237,6 @@ public final class CombatListener implements Listener {
         }
         reportDamage(match, victim, event);
         if (!event.isCancelled() && event.getFinalDamage() >= victim.getHealth()) {
-            event.setCancelled(true);
             botService.handlePlayerDefeat(victim.getUniqueId());
             return;
         }

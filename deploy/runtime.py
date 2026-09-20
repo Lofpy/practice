@@ -9,6 +9,7 @@ import socket
 import struct
 import subprocess
 import sys
+import tempfile
 import threading
 
 CONTROL = Path("/run/poppy/control.sock")
@@ -20,6 +21,113 @@ PORT = int(os.environ.get("SERVER_PORT", "0"))
 def properties(path):
     return dict(line.split("=", 1) for line in path.read_text().splitlines()
                 if "=" in line and not line.lstrip().startswith("#"))
+
+
+def load_toml(text):
+    try:
+        import tomllib
+        return tomllib.loads(text)
+    except ImportError:
+        import toml
+        return toml.loads(text)
+
+
+def replace_file_text(path, transform):
+    """Replace only changed display defaults, atomically and without reformatting."""
+    if not path.is_file():
+        return
+    with path.open(encoding="utf-8", newline="") as source:
+        original = source.read()
+    updated = transform(original)
+    if updated == original:
+        return
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="",
+                                         prefix=".branding-", dir=path.parent,
+                                         delete=False) as output:
+            temporary = Path(output.name)
+            output.write(updated)
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(temporary, path.stat().st_mode & 0o777)
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def migrate_branding(data, kind):
+    """Upgrade known Poppy display defaults; preserve custom/operational settings.
+
+    Deployment calls initialization only after its state/DB backup, so the
+    existing transaction also restores these files if startup fails.
+    """
+    if kind in ("pvp", "lobby"):
+        old = "PoppyPractice 1.8.9 NoDebuff 1v1" if kind == "pvp" else "Poppy Network Lobby"
+        new = r"\u00a7cAscendingMC \u00a77" + ("Practice" if kind == "pvp" else "Lobby")
+        replace_file_text(data / "server.properties", lambda text: re.sub(
+            r"(?m)^(motd=)" + re.escape(old) + r"(\r?)$",
+            lambda match: match.group(1) + new + match.group(2), text))
+
+    if kind == "lobby":
+        import yaml
+        replacements = {
+            "scoreboard-title": ("&d&lPoppy Network", "&c&lAscendingMC"),
+            "welcome-message": (
+                "&dPoppy Network &7へようこそ！ &fコンパスから PvP に参加できます。",
+                "&cAscendingMC &7へようこそ！ &fコンパスから Practice に参加できます。"),
+        }
+
+        def lobby_config(text):
+            document = yaml.compose(text, Loader=yaml.SafeLoader)
+            if not isinstance(document, yaml.MappingNode):
+                return text
+            changes = []
+            for key, value in document.value:
+                if key.value not in replacements or not isinstance(value, yaml.ScalarNode):
+                    continue
+                old, new = replacements[key.value]
+                start, end = value.start_mark.index, value.end_mark.index
+                # Aliases/anchors are operator customizations, not legacy defaults.
+                if (value.value == old and key.end_mark.index < start
+                        and not text[start:end].startswith(("&", "*"))):
+                    changes.append((start, end, json.dumps(new, ensure_ascii=False)))
+            for start, end, replacement in sorted(changes, reverse=True):
+                text = text[:start] + replacement + text[end:]
+            return text
+
+        replace_file_text(data / "plugins/PoppyLobby/config.yml", lobby_config)
+
+    if kind == "proxy":
+        replacements = {
+            ("", "motd"): (
+                "<light_purple>Poppy Network</light_purple> <gray>| Lobby & Practice</gray>",
+                "<red>AscendingMC</red> <gray>| Lobby & Practice</gray>"),
+            ("query", "map"): ("Poppy Network", "AscendingMC"),
+        }
+
+        def proxy_config(text):
+            config = load_toml(text)
+            section = ""
+            result = []
+            for line in text.splitlines(keepends=True):
+                header = re.match(r"^\s*\[([^\[\]]+)\]\s*(?:#.*)?$", line)
+                if header:
+                    section = header.group(1).strip()
+                for (target_section, key), (old, new) in replacements.items():
+                    values = config if not section else config.get(section, {})
+                    if section != target_section or values.get(key) != old:
+                        continue
+                    pattern = (r"^([ \t]*" + re.escape(key) + r"[ \t]*=[ \t]*)"
+                               r"(\"(?:\\.|[^\"\\])*\"|'[^']*')"
+                               r"([ \t]*(?:#[^\r\n]*)?(?:\r?\n)?)$")
+                    line = re.sub(pattern, lambda match: match.group(1)
+                                  + json.dumps(new, ensure_ascii=False) + match.group(3), line)
+                result.append(line)
+            return "".join(result)
+
+        replace_file_text(data / "velocity.toml", proxy_config)
 
 
 def initialize(data=Path("/data"), defaults=Path("/opt/poppy/defaults")):
@@ -38,13 +146,9 @@ def initialize(data=Path("/data"), defaults=Path("/opt/poppy/defaults")):
                 target.write_text(text)
             else:
                 shutil.copyfile(source, target)
+    migrate_branding(data, KIND)
     if KIND == "proxy":
-        try:
-            import tomllib
-            config = tomllib.loads((data / "velocity.toml").read_text())
-        except ImportError:
-            import toml
-            config = toml.load(data / "velocity.toml")
+        config = load_toml((data / "velocity.toml").read_text())
         assert config.get("online-mode") is True, "Proxy online authentication must remain enabled"
         assert config.get("bind") == "0.0.0.0:25565"
         assert config.get("player-info-forwarding-mode") == "LEGACY"

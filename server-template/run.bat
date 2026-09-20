@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title PoppyPractice - WindSpigot
+title AscendingMC Practice - WindSpigot
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0start.ps1" -MaximumMemory 4G
 if errorlevel 1 (

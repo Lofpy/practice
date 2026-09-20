@@ -5,6 +5,7 @@ import com.poppy.practice.ui.MenuHolder;
 import com.poppy.practice.kit.Kit;
 import com.poppy.practice.match.BoxingRules;
 import com.poppy.practice.match.ComboRules;
+import com.poppy.practice.language.PlayerLanguage;
 import org.bukkit.Material;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
@@ -15,15 +16,25 @@ public final class BotSettingsMenu extends MenuHolder {
     public static final String TITLE = "Bot Settings";
     public enum Action { BACK_KITS, START, RESET_ALL, CLOSE }
     private final Kit selectedKit;
+    private final PlayerLanguage language;
 
     public BotSettingsMenu(Kit selectedKit, FileConfiguration config) {
-        super(54, titleFor(selectedKit));
+        this(selectedKit, config, PlayerLanguage.JAPANESE);
+    }
+
+    public BotSettingsMenu(Kit selectedKit, FileConfiguration config, PlayerLanguage language) {
+        super(54, language.choose("Bot設定 | " + selectedKit.getDisplayName(), titleFor(selectedKit)));
         this.selectedKit = selectedKit;
+        this.language = language;
         populate(getInventory(), config);
     }
 
     public static void open(Player player, FileConfiguration config, Kit selectedKit) {
         player.openInventory(new BotSettingsMenu(selectedKit, config).getInventory());
+    }
+
+    public static void open(Player player, FileConfiguration config, Kit selectedKit, PlayerLanguage language) {
+        player.openInventory(new BotSettingsMenu(selectedKit, config, language).getInventory());
     }
 
     public String getKitId() {
@@ -61,6 +72,7 @@ public final class BotSettingsMenu extends MenuHolder {
             return;
         }
         BotSettingsMenu menu = (BotSettingsMenu) inventory.getHolder();
+        PlayerLanguage language = menu.language;
         inventory.clear();
         for (int slot = 0; slot < inventory.getSize(); slot++) {
             inventory.setItem(slot, pane((short) 15));
@@ -69,52 +81,64 @@ public final class BotSettingsMenu extends MenuHolder {
             boolean disabled = category == BotSettingCategory.HEALING
                     && !isSettingAvailable(BotSetting.HEALING_ENABLED, menu.getKitId());
             for (int slot = category.getHeaderSlot(); slot < category.getHeaderSlot() + 9; slot++) {
-                inventory.setItem(slot, pane(disabled ? (short) 7 : category.getPaneDurability()));
+                inventory.setItem(slot, pane(disabled ? (short) 7 : (short) 14));
             }
             // Healing has nine controls: its first control is also the row heading.
             if (category != BotSettingCategory.HEALING) {
                 inventory.setItem(category.getHeaderSlot(), new ItemBuilder(category.getMaterial())
-                        .name(category.getColor() + category.getDisplayName())
-                        .lore("&7Adjust the settings in this row.")
+                        .name("&c" + language.choose(category == BotSettingCategory.GENERAL ? "基本"
+                                : category == BotSettingCategory.MOVEMENT ? "移動"
+                                : category == BotSettingCategory.AIM ? "エイム"
+                                : category == BotSettingCategory.COMBAT ? "戦闘" : "回復", category.getDisplayName()))
+                        .lore(language.choose("&7この列の設定を調整します。", "&7Adjust the settings in this row."))
                         .build());
             }
         }
         for (BotSetting setting : BotSetting.values()) {
             inventory.setItem(setting.getSlot(), isSettingAvailable(setting, menu.getKitId())
-                    ? settingItem(setting, config) : disabledSettingItem(setting, menu.selectedKit));
+                    ? settingItem(setting, config, language) : disabledSettingItem(setting, menu.selectedKit, language));
         }
         inventory.setItem(4, new ItemBuilder(menu.selectedKit.getIcon())
                 .durability(menu.selectedKit.getIconDurability())
-                .name("&bSelected Kit: &f" + menu.selectedKit.getDisplayName())
-                .lore(selectedKitLore(menu.getKitId()))
+                .name(language.choose("&c選択キット: &f", "&cSelected Kit: &f") + menu.selectedKit.getDisplayName())
+                .lore(language == PlayerLanguage.JAPANESE ? japaneseKitLore(menu.getKitId()) : selectedKitLore(menu.getKitId()))
                 .build());
         inventory.setItem(45, new ItemBuilder(Material.ARROW)
-                .name("&eBack to Kit Selection")
-                .lore("&7Choose a different kit.", "&eLeft Click: &fBack")
+                .name(language.choose("&cキット選択へ戻る", "&cBack to Kit Selection"))
+                .lore(language.choose("&7別のキットを選びます。", "&7Choose a different kit."), language.choose("&f左クリック: &7戻る", "&fLeft Click: &7Back"))
                 .build());
         inventory.setItem(47, new ItemBuilder(Material.BOOK)
-                .name("&bShared Bot Settings")
-                .lore("&7These settings apply to all players.",
+                .name(language.choose("&c共通Bot設定", "&cShared Bot Settings"))
+                .lore(language == PlayerLanguage.JAPANESE ? new String[] { "&7全プレイヤーに共通の設定です。", "&7変更はすぐ保存されます。",
+                        "&7次に開始するBot対戦に適用されます。", "&7選択キットは自分専用です。", "", "&f左 / 右: &7増加 / 減少", "&fShift: &7大きく変更", "&f中クリック: &7設定を初期化" }
+                        : new String[] { "&7These settings apply to all players.",
                         "&7Changes are saved immediately.",
                         "&7They affect newly started bot matches.",
                         "&7Your selected kit is not shared.", "",
                         "&eLeft / Right: &fIncrease / Decrease",
-                        "&eShift: &fLarger step", "&eMiddle: &fReset one setting")
+                        "&eShift: &fLarger step", "&eMiddle: &fReset one setting" })
                 .build());
         inventory.setItem(49, new ItemBuilder(Material.EMERALD_BLOCK)
-                .name("&aStart " + menu.selectedKit.getDisplayName() + " Bot Match")
-                .lore("&7Use this kit and the current shared settings.",
-                        "&7A match starts only when you click here.", "", "&eLeft Click: &fStart Match")
+                .name(language.choose("&c" + menu.selectedKit.getDisplayName() + " Bot対戦を開始", "&cStart " + menu.selectedKit.getDisplayName() + " Bot Match"))
+                .lore(language.choose("&7このキットと現在の共通設定を使用します。", "&7Use this kit and the current shared settings."),
+                        language.choose("&7ここをクリックすると試合が始まります。", "&7A match starts only when you click here."), "", language.choose("&f左クリック: &7対戦開始", "&fLeft Click: &7Start Match"))
                 .build());
         inventory.setItem(51, new ItemBuilder(Material.REDSTONE_BLOCK)
-                .name("&cReset All Settings")
-                .lore("&7Restore the original default values.",
-                        "&7Affects all players and all kits.", "", "&eShift + Left Click: &fReset All")
+                .name(language.choose("&c全設定を初期化", "&cReset All Settings"))
+                .lore(language.choose("&7すべての設定を初期値に戻します。", "&7Restore the original default values."),
+                        language.choose("&7全プレイヤー・全キットに影響します。", "&7Affects all players and all kits."), "", language.choose("&fShift + 左クリック: &7全設定を初期化", "&fShift + Left Click: &7Reset All"))
                 .build());
         inventory.setItem(53, new ItemBuilder(Material.BEDROCK)
-                .name("&cClose")
-                .lore("&7Close without starting a match.", "&eLeft Click: &fClose")
+                .name(language.choose("&c閉じる", "&cClose"))
+                .lore(language.choose("&7試合を開始せずに閉じます。", "&7Close without starting a match."), language.choose("&f左クリック: &7閉じる", "&fLeft Click: &7Close"))
                 .build());
+    }
+
+    private static String[] japaneseKitLore(String kitId) {
+        return new String[] { "&f手順2/2: &7Botを設定します。", "",
+                BoxingRules.isBoxing(kitId) ? "&7先に100ヒットで勝利・体力ダメージなし。"
+                        : ComboRules.isCombo(kitId) ? "&7高速コンボ・金リンゴで回復。" : "&7装備とエンダーパールを使うポーションPvP。",
+                "&7灰色の設定はこのキットでは使用されません。", "&7キット選択は自分の試合のみに適用。", "&7戻るボタンで別のキットを選択。" };
     }
 
     static String[] selectedKitLore(boolean boxing) {
@@ -159,51 +183,53 @@ public final class BotSettingsMenu extends MenuHolder {
         }
     }
 
-    private static ItemStack settingItem(BotSetting setting, FileConfiguration config) {
+    private static ItemStack settingItem(BotSetting setting, FileConfiguration config, PlayerLanguage language) {
         String current = setting.isBooleanSetting()
-                ? (setting.booleanValue(config) ? "&aEnabled" : "&cDisabled")
+                ? (setting.booleanValue(config) ? language.choose("&c有効", "&cEnabled") : language.choose("&7無効", "&7Disabled"))
                 : "&f" + setting.formattedValue(config);
         if (setting.isBooleanSetting()) {
             return new ItemBuilder(setting.getMaterial())
-                    .name(setting.getCategory().getColor() + settingLabel(setting))
-                    .lore("&7" + setting.getDescription(), "",
-                            "&7Current: " + current,
-                            "&eLeft/Right Click: &fToggle",
-                            "&eMiddle Click: &fReset")
+                    .name("&c" + settingLabel(setting, language))
+                    .lore("&7" + setting.getDescription(language), "",
+                            language.choose("&7現在: ", "&7Current: ") + current,
+                            language.choose("&f左/右クリック: &7切り替え", "&fLeft/Right Click: &7Toggle"),
+                            language.choose("&f中クリック: &7初期化", "&fMiddle Click: &7Reset"))
                     .build();
         }
         return new ItemBuilder(setting.getMaterial())
-                .name(setting.getCategory().getColor() + settingLabel(setting))
-                .lore("&7" + setting.getDescription(), "",
-                        "&7Current: " + current,
-                        "&eLeft Click: &f+" + setting.getSmallStep(),
-                        "&eRight Click: &f-" + setting.getSmallStep(),
-                        "&eShift Click: &fUse " + setting.getLargeStep(),
-                        "&eMiddle Click: &fReset")
+                .name("&c" + settingLabel(setting, language))
+                .lore("&7" + setting.getDescription(language), "",
+                        language.choose("&7現在: ", "&7Current: ") + current,
+                        language.choose("&f左クリック: &7+", "&fLeft Click: &7+") + setting.getSmallStep(),
+                        language.choose("&f右クリック: &7-", "&fRight Click: &7-") + setting.getSmallStep(),
+                        language.choose("&fShiftクリック: &7変更幅 ", "&fShift Click: &7Use ") + setting.getLargeStep(),
+                        language.choose("&f中クリック: &7初期化", "&fMiddle Click: &7Reset"))
                 .build();
     }
 
-    private static String settingLabel(BotSetting setting) {
+    private static String settingLabel(BotSetting setting, PlayerLanguage language) {
         if (setting == BotSetting.HEALING_ENABLED) {
-            return "Healing: Enabled";
+            return setting.getDisplayName(language);
         }
-        String name = setting.getDisplayName();
+        String name = setting.getDisplayName(language);
         int separator = name.indexOf(": ");
         return separator < 0 ? name : name.substring(separator + 2);
     }
 
-    private static ItemStack disabledSettingItem(BotSetting setting, Kit kit) {
+    private static ItemStack disabledSettingItem(BotSetting setting, Kit kit, PlayerLanguage language) {
         return new ItemBuilder(Material.STAINED_GLASS_PANE)
                 .durability((short) 7)
-                .name("&8" + settingLabel(setting))
-                .lore("&7Not used in " + kit.getDisplayName() + ".",
+                .name("&8" + settingLabel(setting, language))
+                .lore(language == PlayerLanguage.JAPANESE ? new String[] { "&7" + kit.getDisplayName() + " では使用しません。",
+                        ComboRules.isCombo(kit.getId()) ? "&7Comboではエンチャント金リンゴを使用します。" : "&7このキットでは使用しない設定です。",
+                        "&7NoDebuff等の対応キットで変更してください。", "&7保存されている値は変わりません。" } : new String[] { "&7Not used in " + kit.getDisplayName() + ".",
                         ComboRules.isCombo(kit.getId())
                                 ? "&7Combo uses enchanted golden apples automatically."
                                 : "&7This kit does not use this setting.",
                         setting.getCategory() == BotSettingCategory.HEALING
                                 ? "&7Choose NoDebuff to edit this setting."
                                 : "&7Choose NoDebuff or Combo to edit this setting.",
-                        "&7Its saved value has not been changed.")
+                        "&7Its saved value has not been changed." })
                 .build();
     }
 

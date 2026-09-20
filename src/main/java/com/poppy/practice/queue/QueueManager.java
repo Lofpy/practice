@@ -79,10 +79,11 @@ public final class QueueManager {
             return false;
         }
         if (ratingService != null && !ratingService.isQualified(player.getUniqueId(), kit.getId())) {
-            player.sendMessage(org.bukkit.ChatColor.RED + "Ranked Queue: " + kit.getDisplayName()
-                    + org.bukkit.ChatColor.RED + " の認定戦を3回完了してください。 ("
-                    + ratingService.getPlacementCount(player.getUniqueId(), kit.getId()) + "/3)"
-                    + org.bukkit.ChatColor.GRAY + " /tier " + kit.getId());
+            int count = ratingService.getPlacementCount(player.getUniqueId(), kit.getId());
+            messageService.sendLocalized(player, "&cランク対戦: " + kit.getDisplayName()
+                    + " の認定試合を3回完了してください。（" + count + "/3）&7 /tier " + kit.getId(),
+                    "&cRanked Queue: complete 3 certification matches for " + kit.getDisplayName()
+                    + " (" + count + "/3). &7/tier " + kit.getId());
             return false;
         }
 

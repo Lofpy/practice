@@ -3,6 +3,7 @@ package com.poppy.practice.bot;
 import com.poppy.practice.kit.BoxingKit;
 import com.poppy.practice.kit.ComboKit;
 import com.poppy.practice.kit.NoDebuffKit;
+import com.poppy.practice.language.PlayerLanguage;
 import org.junit.Test;
 
 import java.util.HashSet;
@@ -15,6 +16,15 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class BotSettingsMenuTest {
+    @Test public void everyBotSettingHasJapaneseAndEnglishLabelsWithoutChangingStoragePaths() {
+        for (BotSetting setting : BotSetting.values()) {
+            assertEquals(setting.getDisplayName(), setting.getDisplayName(PlayerLanguage.ENGLISH));
+            assertEquals(setting.getDescription(), setting.getDescription(PlayerLanguage.ENGLISH));
+            assertFalse(setting.getDisplayName().equals(setting.getDisplayName(PlayerLanguage.JAPANESE)));
+            assertFalse(setting.getDescription().equals(setting.getDescription(PlayerLanguage.JAPANESE)));
+            assertEquals(setting, BotSetting.fromPath(setting.getPath()));
+        }
+    }
     @Test
     public void allSettingsHaveUniqueSlotsWithoutOverlappingActions() {
         Set<Integer> slots = new HashSet<Integer>();

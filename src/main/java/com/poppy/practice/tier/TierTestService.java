@@ -5,6 +5,8 @@ import com.poppy.practice.match.MatchState;
 import com.poppy.practice.rating.RatingService;
 import com.poppy.practice.result.MatchParticipantSnapshot;
 import com.poppy.practice.result.MatchResult;
+import com.poppy.practice.language.LanguageService;
+import com.poppy.practice.language.PlayerLanguage;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -25,6 +27,11 @@ public final class TierTestService {
     private final Path assessmentDirectory;
     private final RatingService ratings;
     private final Logger logger;
+    private LanguageService languages;
+    public void setLanguageService(LanguageService languages) { this.languages = languages; }
+    private PlayerLanguage language(Player player) {
+        return languages == null ? PlayerLanguage.JAPANESE : languages.language(player);
+    }
 
     public TierTestService(File dataDirectory, RatingService ratings, Logger logger) {
         if (dataDirectory == null || ratings == null || logger == null) {
@@ -37,8 +44,8 @@ public final class TierTestService {
 
     public boolean canStart(Player player, String kitId) {
         if (ratings.isQualified(player.getUniqueId(), kitId)) {
-            player.sendMessage(ChatColor.YELLOW + "Your " + kitId
-                    + " certification is complete. Use Ranked Queue or normal Bot Practice.");
+            player.sendMessage(ChatColor.YELLOW + language(player).choose(kitId + " の認定は完了しています。ランク対戦または通常のBot対戦をご利用ください。",
+                    "Your " + kitId + " certification is complete. Use Ranked Queue or normal Bot Practice."));
             return false;
         }
         return true;
@@ -69,21 +76,21 @@ public final class TierTestService {
             logger.log(Level.SEVERE, "Could not save certification " + match.getId(), failure);
             if (player != null && player.isOnline()) {
                 player.sendMessage(ChatColor.RED
-                        + "Certification could not be saved. Queue remains locked; please contact an administrator.");
+                        + language(player).choose("認定を保存できませんでした。キューは未解放のままです。管理者に連絡してください。", "Certification could not be saved. Queue remains locked; please contact an administrator."));
             }
             return false;
         }
         if (player != null && player.isOnline()) {
             int count = ratings.getPlacementCount(match.getPlayerId(), match.getKitId());
-            player.sendMessage(ChatColor.GOLD + "Certification [" + match.getKitId() + "] "
-                    + count + "/3 | Score: " + number(assessment.getScore()) + "/100");
+            player.sendMessage(ChatColor.RED + language(player).choose("認定 [", "Certification [") + match.getKitId() + "] "
+                    + count + language(player).choose("/3 | スコア: ", "/3 | Score: ") + number(assessment.getScore()) + "/100");
             for (Map.Entry<String, Double> metric : assessment.getMetrics().entrySet()) {
-                player.sendMessage(ChatColor.GRAY + "  " + metric.getKey() + ": "
+                player.sendMessage(ChatColor.GRAY + "  " + metricName(language(player), metric.getKey()) + ": "
                         + ChatColor.WHITE + number(metric.getValue()) + "%");
             }
-            player.sendMessage(ChatColor.DARK_GRAY + "Local fixed-bot assessment; not an external competitive tier.");
+            player.sendMessage(ChatColor.DARK_GRAY + language(player).choose("サーバー内の固定Bot評価です。外部の競技Tierではありません。", "Local fixed-bot assessment; not an external competitive tier."));
             if (ratings.isQualified(match.getPlayerId(), match.getKitId())) {
-                player.sendMessage(ChatColor.GREEN + "Ranked " + match.getKitId() + " unlocked! Initial ELO: "
+                player.sendMessage(ChatColor.GREEN + language(player).choose(match.getKitId() + " のランク対戦を解放！初期ELO: ", "Ranked " + match.getKitId() + " unlocked! Initial ELO: ")
                         + RatingService.format(ratings.getRatingMilli(match.getPlayerId(), match.getKitId())));
             }
         }
@@ -139,5 +146,14 @@ public final class TierTestService {
 
     private static String number(double value) {
         return String.format(Locale.ROOT, "%.1f", value);
+    }
+
+    private static String metricName(PlayerLanguage language, String name) {
+        if (language == PlayerLanguage.ENGLISH) return name;
+        if ("Hit share".equals(name)) return "ヒット占有率";
+        if ("Result".equals(name)) return "勝敗";
+        if ("Remaining health".equals(name)) return "残り体力";
+        if ("Potion accuracy".equals(name)) return "ポーション精度";
+        return name;
     }
 }

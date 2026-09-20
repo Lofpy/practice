@@ -93,7 +93,7 @@ public final class PoppyLobbyPlugin extends JavaPlugin implements Listener {
             getLogger().info("PvP bridge mode: only /hub -> proxy lobby. No gameplay listeners or tasks are enabled.");
             return;
         }
-        registerLobbyCommand("pvp", Collections.<String>emptyList(), "Connect to Poppy Practice");
+        registerLobbyCommand("pvp", Collections.<String>emptyList(), "Connect to Practice");
         registerLobbyCommand("lobby", Arrays.asList("spawn"), "Return to the lobby spawn");
         registerLobbyCommand("lobbybuild", Collections.<String>emptyList(), "Toggle protected lobby editing");
         getServer().getPluginManager().registerEvents(this, this);
@@ -176,7 +176,7 @@ public final class PoppyLobbyPlugin extends JavaPlugin implements Listener {
         if ("lobby".equalsIgnoreCase(name)) {
             returnToSpawn(player);
         } else if ("pvp".equalsIgnoreCase(name)) {
-            connect(player, practiceMessage, "Poppy Practice");
+            connect(player, practiceMessage, "Practice");
         } else if ("lobbybuild".equalsIgnoreCase(name)) {
             if (!player.hasPermission(BUILD_PERMISSION)) {
                 player.sendMessage(color("&cこのコマンドを使用する権限がありません。"));
@@ -213,7 +213,7 @@ public final class PoppyLobbyPlugin extends JavaPlugin implements Listener {
         lastConnect.put(player.getUniqueId(), now);
         player.closeInventory();
         player.sendPluginMessage(this, CHANNEL, message);
-        player.sendMessage(color("&d" + destination + " &7へ接続しています…"));
+        player.sendMessage(color("&c" + destination + " &7へ接続しています…"));
     }
 
     private boolean inLobby(World world) {
@@ -269,7 +269,7 @@ public final class PoppyLobbyPlugin extends JavaPlugin implements Listener {
         for (PotionEffect effect : player.getActivePotionEffects()) {
             player.removePotionEffect(effect.getType());
         }
-        player.getInventory().setItem(0, item(Material.COMPASS, "&d&lServer Selector", "&7右クリックでサーバーを選択"));
+        player.getInventory().setItem(0, item(Material.COMPASS, "&c&lサーバー選択 / Servers", "&7右クリックでサーバーを選択"));
         player.getInventory().setHeldItemSlot(0);
         player.teleport(spawn);
         updateScoreboard(player);
@@ -298,7 +298,7 @@ public final class PoppyLobbyPlugin extends JavaPlugin implements Listener {
         for (int slot = 0; slot < holder.inventory.getSize(); slot++) {
             holder.inventory.setItem(slot, filler);
         }
-        holder.inventory.setItem(PRACTICE_SLOT, item(Material.DIAMOND_SWORD, "&d&lPoppy Practice",
+        holder.inventory.setItem(PRACTICE_SLOT, item(Material.DIAMOND_SWORD, "&c&lPractice",
                 "&7PvP / Bot / Kit / Queue", "", "&eクリックして参加"));
         player.openInventory(holder.inventory);
     }
@@ -321,13 +321,13 @@ public final class PoppyLobbyPlugin extends JavaPlugin implements Listener {
         if (board == null) {
             board = Bukkit.getScoreboardManager().getNewScoreboard();
             Objective objective = board.registerNewObjective("poppy_lobby", "dummy");
-            String title = color(getConfig().getString("scoreboard-title", "&d&lPoppy Network"));
+            String title = color(getConfig().getString("scoreboard-title", "&c&lAscendingMC"));
             objective.setDisplayName(title.length() > 32 ? title.substring(0, 32) : title);
             objective.setDisplaySlot(DisplaySlot.SIDEBAR);
             objective.getScore(color("&8&m--------------------")).setScore(4);
             objective.getScore(" ").setScore(3);
             Team online = board.registerNewTeam("online");
-            online.setPrefix(color("&fOnline: &d"));
+            online.setPrefix(color("&fOnline: &c"));
             online.addEntry(color("&r"));
             objective.getScore(color("&r")).setScore(2);
             objective.getScore(color("&8&m--------------------&r")).setScore(1);
@@ -349,7 +349,7 @@ public final class PoppyLobbyPlugin extends JavaPlugin implements Listener {
         event.setJoinMessage(null);
         final Player player = event.getPlayer();
         preparePlayer(player);
-        player.sendMessage(color(getConfig().getString("welcome-message", "&dWelcome to Poppy Network")));
+        player.sendMessage(color(getConfig().getString("welcome-message", "&cWelcome to AscendingMC")));
     }
 
     @EventHandler public void onQuit(PlayerQuitEvent event) {
@@ -409,7 +409,7 @@ public final class PoppyLobbyPlugin extends JavaPlugin implements Listener {
                 Bukkit.getScheduler().runTask(this, new Runnable() {
                     @Override public void run() {
                         if (player.isOnline() && inLobby(player.getWorld())) {
-                            connect(player, practiceMessage, "Poppy Practice");
+                            connect(player, practiceMessage, "Practice");
                         }
                     }
                 });

@@ -31,7 +31,7 @@ public class BotCommandTest {
                     new String[] {"debug", "straight"}));
 
             assertEquals(1, sender.messages.size());
-            assertEquals("Usage: /bot [start|settings|leave]",
+            assertEquals("使い方: /bot [start|settings|leave]",
                     ChatColor.stripColor(sender.messages.get(0)));
         }
     }
@@ -79,7 +79,7 @@ public class BotCommandTest {
 
         assertEquals(4, sender.messages.size());
         for (String message : sender.messages) {
-            assertEquals("Usage: /bot [start|settings|leave]", ChatColor.stripColor(message));
+            assertEquals("使い方: /bot [start|settings|leave]", ChatColor.stripColor(message));
         }
     }
 

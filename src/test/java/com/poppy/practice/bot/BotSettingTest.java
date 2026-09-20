@@ -99,7 +99,7 @@ public class BotSettingTest {
         assertEquals(18.0D, BotSetting.HEALING_COOLDOWN.numberValue(config), 0.0001D);
         assertEquals(0.0D, BotSetting.HEALING_RETREAT_TICKS.numberValue(config), 0.0001D);
         assertTrue(BotSetting.COPY_PLAYER_SKIN.booleanValue(config));
-        assertFalse(BotSetting.HEAL_OPPONENT.booleanValue(config));
+        assertTrue(BotSetting.HEAL_OPPONENT.booleanValue(config));
     }
 
     @Test
@@ -115,7 +115,7 @@ public class BotSettingTest {
         BotSetting.HEALING_ENABLED.adjust(config, true, false);
         assertFalse(BotSetting.HEALING_ENABLED.booleanValue(config));
         BotSetting.HEAL_OPPONENT.adjust(config, true, false);
-        assertTrue(BotSetting.HEAL_OPPONENT.booleanValue(config));
+        assertFalse(BotSetting.HEAL_OPPONENT.booleanValue(config));
     }
 
     @Test
