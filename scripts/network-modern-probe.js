@@ -1,5 +1,5 @@
 'use strict';
-// Synthetic offline diagnostic ONLY for the isolated proxy on 127.0.0.1:25568.
+// Synthetic offline diagnostic ONLY for the isolated proxy on 127.0.0.1:25569.
 // Never changes public authentication or sends match/queue commands.
 // Protocol 776 is Minecraft Java 26.2. Packet IDs checked against the installed
 // Velocity 4.1.1 StateRegistry and ViaVersion 5.11.0 Client/ServerboundPackets26_1.
@@ -10,7 +10,7 @@ const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 
 const HOST = '127.0.0.1';
-const PORT = 25568;
+const PORT = 25569;
 const PROTOCOL = 776;
 const USERNAME = 'NetProbe776';
 const MAX_PACKET = 8 * 1024 * 1024;
@@ -253,7 +253,7 @@ function modernLogin() {
 }
 
 if (process.argv.slice(2).some(argument => argument !== '--roundtrip')) {
-  console.error('Only --roundtrip is accepted; target is restricted to 127.0.0.1:25568.');
+  console.error('Only --roundtrip is accepted; target is restricted to 127.0.0.1:25569.');
   process.exitCode = 1;
 } else {
   modernLogin().then(result => console.log('MODERN_LOGIN_PASS', JSON.stringify(result)))

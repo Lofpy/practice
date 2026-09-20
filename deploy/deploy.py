@@ -14,7 +14,8 @@ import tarfile
 import tempfile
 import time
 
-SERVICES = ("pvp", "lobby", "proxy")
+SERVICES = ("pvp", "lobby", "survival", "proxy")
+LEGACY_SERVICES = ("pvp", "lobby", "proxy")
 DATABASE = "poppy-postgres"
 DATABASE_DIR = "postgres-production"
 
@@ -45,6 +46,14 @@ class Deployment:
     def compose(self, release, *args):
         return self.run(["docker", "compose", "--project-name", "poppy", "--env-file",
                          release / "release.env", "-f", release / "compose.yml", *args])
+
+    def services(self, release):
+        """Use the release's own services, including when rolling back pre-Survival."""
+        manifest = json.loads((release / "release.json").read_text())
+        names = set(manifest["images"])
+        if names not in (set(LEGACY_SERVICES), set(SERVICES)):
+            raise ValueError("Unexpected release service set")
+        return tuple(service for service in SERVICES if service in names)
 
     def gate(self, closed):
         rule = ["INPUT", "!", "-i", "lo", "-p", "tcp", "--dport", "25565", "-j", "REJECT"]
@@ -119,7 +128,7 @@ class Deployment:
     def stop(self, release, allow_exited_failure=False):
         if release is None:
             return
-        for service in reversed(SERVICES):
+        for service in reversed(self.services(release)):
             for container in self.containers(release, service):
                 self.run(["docker", "update", "--restart=no", container])
                 state = self.state(container)
@@ -139,12 +148,13 @@ class Deployment:
 
     def start(self, release):
         # Every existing container must be stopped before force-recreate.
-        for service in SERVICES:
+        services = self.services(release)
+        for service in services:
             for container in self.containers(release, service):
                 if self.state(container)["Running"]:
                     raise RuntimeError("Refusing to replace a running writer")
         self.start_database()
-        for service in SERVICES:
+        for service in services:
             self.compose(release, "up", "-d", "--no-deps", "--force-recreate", service)
             deadline = time.monotonic() + self.health_timeout
             while True:
@@ -173,6 +183,8 @@ class Deployment:
         prefix = self.config["registry"]
         if not re.fullmatch(r"[a-z0-9-]+-docker.pkg.dev/[a-z0-9-]+/poppy", prefix):
             raise ValueError("Invalid registry")
+        if set(manifest["images"]) != set(SERVICES):
+            raise ValueError("New releases must contain exactly all four services")
         for service in SERVICES:
             if not re.fullmatch(re.escape(prefix + "/" + service) + r"@sha256:[0-9a-f]{64}",
                                 manifest["images"][service]):
@@ -301,6 +313,11 @@ class Deployment:
             eula = self.root / "state" / service / "eula.txt"
             if not eula.exists() or "eula=true" not in eula.read_text().splitlines():
                 raise RuntimeError("Operator must accept EULA first: " + str(eula))
+        survival = self.root / "state/survival"
+        if survival.exists():
+            eula = survival / "eula.txt"
+            if not eula.is_file() or "eula=true" not in eula.read_text().splitlines():
+                raise RuntimeError("Existing Survival EULA requires operator review: " + str(eula))
         self.gate(True)
         atomic_json(self.journal, {"previous": str(previous), "candidate": str(release), "phase": "stopping"})
         self.stop(previous)  # Failure intentionally leaves ingress blocked and journal intact.
@@ -318,6 +335,7 @@ class Deployment:
         atomic_json(self.journal, {"previous": str(previous), "candidate": str(release),
                                   "backup": str(archive), "phase": "starting"})
         try:
+            self.prepare_survival_state()
             self.start(release)
         except Exception:
             # If saving times out here, DO NOT replace data or start the old release.
@@ -335,6 +353,22 @@ class Deployment:
         self.journal.unlink()
         self.database_committed()
         self.gate(False)
+
+    def prepare_survival_state(self):
+        """Reuse the operator's accepted EULA only after backup; never change false."""
+        directory = self.root / "state/survival"
+        if directory.exists():
+            if directory.is_symlink() or not directory.is_dir():
+                raise RuntimeError("Unsafe Survival state directory")
+            return
+        source = self.root / "state/pvp/eula.txt"
+        if "eula=true" not in source.read_text().splitlines():
+            raise RuntimeError("Operator EULA acceptance required")
+        directory.mkdir(mode=0o750)
+        shutil.copyfile(source, directory / "eula.txt")
+        # Deployment runs as root; Docker services consistently use UID/GID 10001.
+        os.chown(directory, 10001, 10001)
+        os.chown(directory / "eula.txt", 10001, 10001)
 
     def resume(self):
         self.gate(True)

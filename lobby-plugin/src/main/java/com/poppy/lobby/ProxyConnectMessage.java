@@ -10,7 +10,7 @@ public final class ProxyConnectMessage {
 
     public static byte[] encode(String serverName) {
         if (serverName == null || !serverName.matches("[A-Za-z0-9_-]{1,64}")) {
-            throw new IllegalArgumentException("practice-server must contain 1-64 letters, digits, underscores or hyphens");
+            throw new IllegalArgumentException("Proxy backend names must contain 1-64 letters, digits, underscores or hyphens");
         }
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();

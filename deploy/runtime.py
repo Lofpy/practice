@@ -16,6 +16,8 @@ CONTROL = Path("/run/poppy/control.sock")
 READY = Path("/run/poppy/ready")
 KIND = os.environ.get("SERVER_KIND", "")
 PORT = int(os.environ.get("SERVER_PORT", "0"))
+PLUGIN_SOURCE = Path("/opt/poppy/plugins")
+SURVIVAL_PROTOCOL = 777
 
 
 def properties(path):
@@ -148,12 +150,23 @@ def initialize(data=Path("/data"), defaults=Path("/opt/poppy/defaults")):
                 shutil.copyfile(source, target)
     migrate_branding(data, KIND)
     if KIND == "proxy":
+        # Added only after the deployment's complete state backup. Existing custom
+        # addresses must fail validation, never be silently overwritten.
+        def register_survival(text):
+            config = load_toml(text)
+            if "survival" in config.get("servers", {}):
+                return text
+            return re.sub(r"(?m)^(\[servers\][ \t]*(?:#[^\r\n]*)?)(\r?\n)",
+                          lambda match: match.group(1) + match.group(2)
+                          + 'survival = "127.0.0.1:25568"' + match.group(2), text, count=1)
+        replace_file_text(data / "velocity.toml", register_survival)
         config = load_toml((data / "velocity.toml").read_text())
         assert config.get("online-mode") is True, "Proxy online authentication must remain enabled"
         assert config.get("bind") == "0.0.0.0:25565"
         assert config.get("player-info-forwarding-mode") == "LEGACY"
         assert config.get("servers", {}).get("pvp") == "127.0.0.1:25566"
         assert config.get("servers", {}).get("lobby") == "127.0.0.1:25567"
+        assert config.get("servers", {}).get("survival") == "127.0.0.1:25568"
     else:
         assert properties(data / "eula.txt").get("eula", "").strip() == "true", "Operator EULA acceptance required"
         config = properties(data / "server.properties")
@@ -161,14 +174,21 @@ def initialize(data=Path("/data"), defaults=Path("/opt/poppy/defaults")):
                            "online-mode": "false", "enable-rcon": "false"}.items():
             assert config.get(key) == value, "Unsafe backend setting: " + key
         assert yaml.safe_load((data / "spigot.yml").read_text()).get("settings", {}).get("bungeecord") is True
-        plugins = data / "plugins"
-        plugins.mkdir(exist_ok=True)
-        managed = list(Path("/opt/poppy/plugins").glob("*.jar"))
-        names = {path.name for path in managed}
-        for existing in plugins.glob("*.jar"):
-            assert existing.name in names, "Unmanaged/duplicate plugin requires review: " + existing.name
-        for source in managed:
-            shutil.copyfile(source, plugins / source.name)
+        if KIND == "survival":
+            assert config.get("enforce-secure-profile") == "false", "Legacy forwarding requires proxy authentication"
+            paper = yaml.safe_load((data / "config/paper-global.yml").read_text())
+            assert paper.get("proxies", {}).get("bungee-cord", {}).get("online-mode") is True
+            assert paper.get("proxies", {}).get("velocity", {}).get("enabled") is False
+    plugins = data / "plugins"
+    plugins.mkdir(exist_ok=True)
+    managed = list(PLUGIN_SOURCE.glob("*.jar"))
+    names = {path.name for path in managed}
+    if KIND == "survival":
+        assert names == {"AscendingSurvival.jar"}, "Survival must not include protocol translation plugins"
+    for existing in plugins.glob("*.jar"):
+        assert existing.name in names, "Unmanaged/duplicate plugin requires review: " + existing.name
+    for source in managed:
+        shutil.copyfile(source, plugins / source.name)
 
 
 def varint(value):
@@ -193,9 +213,10 @@ def read_varint(sock):
     raise RuntimeError("Invalid VarInt")
 
 
-def status_ping(port):
+def status_ping(port, expected_protocol=None):
     host = b"localhost"
-    payload = b"\x00" + varint(47) + varint(len(host)) + host + struct.pack(">H", port) + b"\x01"
+    protocol = expected_protocol if expected_protocol is not None else 47
+    payload = b"\x00" + varint(protocol) + varint(len(host)) + host + struct.pack(">H", port) + b"\x01"
     with socket.create_connection(("127.0.0.1", port), timeout=3) as sock:
         sock.sendall(varint(len(payload)) + payload + b"\x01\x00")
         size = read_varint(sock)
@@ -211,6 +232,8 @@ def status_ping(port):
             data += block
         response = json.loads(data)
         assert "version" in response and "players" in response
+        if expected_protocol is not None:
+            assert response["version"].get("protocol") == expected_protocol, "Unexpected Survival protocol"
 
 
 def command(text):
@@ -260,7 +283,9 @@ def run():
                     connection.sendall(b"OK")
     threading.Thread(target=listen, daemon=True).start()
     required = {"pvp": ["PoppyPractice 0.1.0 enabled.", "PvP bridge mode:"],
-                "lobby": ["Standalone lobby enabled."], "proxy": []}[KIND]
+                "lobby": ["Standalone lobby enabled."],
+                "survival": ["AscendingSurvival 0.1.0 enabled."],
+                "proxy": ["AscendingNetwork enabled: Survival requires Minecraft 26.3 (protocol 777)"]}[KIND]
     seen = set()
     failed = False
     for line in child.stdout:
@@ -283,7 +308,7 @@ if __name__ == "__main__":
         sys.exit(run())
     elif sys.argv[1:] == ["health"]:
         assert READY.exists(), "Startup/plugins not ready"
-        status_ping(PORT)
+        status_ping(PORT, SURVIVAL_PROTOCOL if KIND == "survival" else None)
     elif sys.argv[1:] == ["stop"]:
         command("end" if KIND == "proxy" else "stop")
     else:

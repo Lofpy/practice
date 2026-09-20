@@ -1,0 +1,6 @@
+# The shared proxy must remain LEGACY for the separate 1.8 Practice and Lobby.
+proxies:
+  bungee-cord:
+    online-mode: true
+  velocity:
+    enabled: false

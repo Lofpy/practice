@@ -4,6 +4,8 @@
 /tmp/
 /network/
 /lobby-plugin/target/
+/survival-plugin/target/
+/proxy-plugin/target/
 /.codex/
 /.agents/
 /logs/

@@ -9,14 +9,18 @@ $cacheRoot = Join-Path $env:LOCALAPPDATA 'PoppyPracticeTools\network-cache'
 $markerPath = Join-Path $networkRoot 'enabled.json'
 $pendingPath = Join-Path $networkRoot 'migration-pending.json'
 if ((Test-Path -LiteralPath $markerPath) -or (Test-Path -LiteralPath $pendingPath)) { throw 'Network is enabled or an interrupted migration needs recovery. Stop all servers and run scripts/disable-network.ps1 first.' }
-foreach ($port in @(25565,25566,25567)) {
+foreach ($port in @(25565,25566,25567,25568)) {
     if (Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue) {
         throw "Port $port is still in use. Stop the PvP, lobby, and proxy servers cleanly before migration."
     }
 }
 $practiceJar = Join-Path $repoRoot 'target\PoppyPractice-0.1.0.jar'
 $lobbyJar = Join-Path $repoRoot 'lobby-plugin\target\PoppyLobby-0.1.0.jar'
-foreach ($required in @($practiceJar,$lobbyJar,(Join-Path $networkRoot 'proxy\velocity.jar'),(Join-Path $networkRoot 'lobby\plugins\PoppyLobby.jar'))) {
+foreach ($required in @($practiceJar,$lobbyJar,(Join-Path $networkRoot 'proxy\velocity.jar'),
+    (Join-Path $networkRoot 'lobby\plugins\PoppyLobby.jar'),
+    (Join-Path $networkRoot 'proxy\plugins\AscendingNetwork.jar'),
+    (Join-Path $networkRoot 'survival\paper.jar'),
+    (Join-Path $networkRoot 'survival\plugins\AscendingSurvival.jar'))) {
     if (-not (Test-Path -LiteralPath $required)) { throw "Missing $required; complete setup/build first." }
 }
 foreach ($name in @('ViaVersion.jar','ViaBackwards.jar','ViaRewind.jar')) {
@@ -27,10 +31,12 @@ foreach ($name in @('pvp-lobby.yml','via-config.yml','artifacts.json')) {
     if (-not (Test-Path -LiteralPath (Join-Path $templateRoot $name) -PathType Leaf)) { throw "Missing network template: $name" }
 }
 $artifacts = (Get-Content -LiteralPath (Join-Path $templateRoot 'artifacts.json') -Raw | ConvertFrom-Json).artifacts
-foreach ($name in @('velocity.jar','ViaVersion.jar','ViaBackwards.jar','ViaRewind.jar')) {
+foreach ($name in @('velocity.jar','paper.jar','ViaVersion.jar','ViaBackwards.jar','ViaRewind.jar')) {
     $artifact = @($artifacts | Where-Object { $_.name -ceq $name })
     if ($artifact.Count -ne 1 -or $artifact[0].sha256 -notmatch '^[a-fA-F0-9]{64}$') { throw "Invalid artifact manifest entry: $name" }
-    $installed = if ($name -eq 'velocity.jar') { Join-Path $networkRoot 'proxy\velocity.jar' } else { Join-Path $networkRoot "lobby\plugins\$name" }
+    $installed = if ($name -eq 'velocity.jar') { Join-Path $networkRoot 'proxy\velocity.jar' }
+        elseif ($name -eq 'paper.jar') { Join-Path $networkRoot 'survival\paper.jar' }
+        else { Join-Path $networkRoot "lobby\plugins\$name" }
     foreach ($path in @((Join-Path $cacheRoot $name), $installed)) {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne $artifact[0].sha256) { throw "Missing or checksum-mismatched artifact: $path" }
     }
@@ -122,4 +128,4 @@ if (-not (Test-Path -LiteralPath $viaConfig)) {
 Write-Host "Network enabled. Previous server files are recoverable in $backupRoot"
 Write-Host 'ProtocolSupport was archived, not deleted; Via plugins now translate client versions.'
 Write-Host 'PvP world, player data, and PoppyPractice configuration were not changed.'
-Write-Host 'Start all three servers with run-network.bat.'
+Write-Host 'Start all four servers with run-network.bat.'

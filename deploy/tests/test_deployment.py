@@ -33,7 +33,7 @@ class Transaction(deploy.Deployment):
         self.old.mkdir()
         self.new.mkdir()
         self.current.symlink_to(self.old)
-        for kind in ("pvp", "lobby"):
+        for kind in ("pvp", "lobby", "survival"):
             directory = self.root / "state" / kind
             directory.mkdir(parents=True)
             (directory / "eula.txt").write_text("eula=true\n")  # Fixture only; no Minecraft runtime.
@@ -144,6 +144,14 @@ class TransactionTests(unittest.TestCase):
             self.tx.deploy(self.tx.root)
         self.assertEqual(self.tx.events, ["pull"])
 
+    def test_existing_survival_eula_is_never_accepted_automatically(self):
+        path = self.tx.root / "state/survival/eula.txt"
+        path.write_text("eula=false\n")
+        with self.assertRaisesRegex(RuntimeError, "Existing Survival EULA"):
+            self.tx.deploy(self.tx.root)
+        self.assertEqual(self.tx.events, ["pull"])
+        self.assertEqual(path.read_text(), "eula=false\n")
+
 
 class HostTests(unittest.TestCase):
     def test_restore_on_python_without_extract_filter(self):
@@ -155,21 +163,23 @@ class HostTests(unittest.TestCase):
 
     def test_slow_start_can_recover_from_unhealthy_before_deadline(self):
         tx = deploy.Deployment("/unused", {})
+        tx.services = lambda release: deploy.SERVICES
         tx.start_database = lambda: None
         tx.containers = lambda release, service: [service]
         tx.compose = lambda *args: None
-        states = ([{"Running": False}] * 3 +
+        states = ([{"Running": False}] * 4 +
                   [{"Running": True, "Health": {"Status": status}}
-                   for status in ("unhealthy", "healthy", "healthy", "healthy")])
+                   for status in ("unhealthy", "healthy", "healthy", "healthy", "healthy")])
         with patch.object(tx, "state", side_effect=states), patch.object(deploy.time, "sleep"):
             tx.start(Path("/release"))
 
     def test_unhealthy_start_still_fails_at_deadline(self):
         tx = deploy.Deployment("/unused", {})
+        tx.services = lambda release: deploy.SERVICES
         tx.start_database = lambda: None
         tx.containers = lambda release, service: [service]
         tx.compose = lambda *args: subprocess.CompletedProcess([], 0, "startup log", "")
-        states = ([{"Running": False}] * 3 +
+        states = ([{"Running": False}] * 4 +
                   [{"Running": True, "Health": {"Status": "unhealthy"}}] * 2)
         with patch.object(tx, "state", side_effect=states), \
                 patch.object(deploy.time, "monotonic", side_effect=[0, 1, 241]), \
@@ -192,10 +202,11 @@ class HostTests(unittest.TestCase):
                 return subprocess.CompletedProcess(args, 0, json.dumps(state), "")
             return subprocess.CompletedProcess(args, 0, "", "")
         tx = deploy.Deployment("/unused", {}, runner=run)
+        tx.services = lambda release: deploy.SERVICES
         with patch.object(deploy.time, "sleep"):
             tx.stop(Path("/release"))
         consoles = [args[2] for args in calls if args[:2] == ["docker", "exec"]]
-        self.assertEqual(consoles, ["proxy", "lobby", "pvp"])
+        self.assertEqual(consoles, ["proxy", "survival", "lobby", "pvp"])
         self.assertFalse(any("kill" in args or "down" in args for args in calls))
 
     def test_immutable_image_required(self):
@@ -215,6 +226,9 @@ class HostTests(unittest.TestCase):
             (root / "state/pvp").mkdir(parents=True)
             target = root / "state/pvp/ratings.yml"
             target.write_text("rating: 1700\n")
+            survival = root / "state/survival/survival/region/r.0.0.mca"
+            survival.parent.mkdir(parents=True)
+            survival.write_bytes(b"original survival chunks")
             calls = []
             def run(args, check=True):
                 calls.append(list(map(str, args)))
@@ -229,8 +243,12 @@ class HostTests(unittest.TestCase):
             archive = tx.backup(Path("/release"))
             (db / "example").write_text("new db")
             target.write_text("changed")
+            survival.write_bytes(b"changed survival chunks")
             quarantined = tx.restore(archive)
             self.assertEqual(target.read_text(), "rating: 1700\n")
+            self.assertEqual(survival.read_bytes(), b"original survival chunks")
+            self.assertEqual((quarantined / "survival/survival/region/r.0.0.mca").read_bytes(),
+                             b"changed survival chunks")
             self.assertEqual((db / "example").read_text(), "original db")
             self.assertEqual((quarantined.parent / deploy.DATABASE_DIR / "18/docker/example").read_text(), "new db")
             self.assertEqual((quarantined / "pvp/ratings.yml").read_text(), "changed")

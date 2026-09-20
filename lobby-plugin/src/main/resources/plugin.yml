@@ -2,7 +2,7 @@ name: PoppyLobby
 version: 0.1.0
 main: com.poppy.lobby.PoppyLobbyPlugin
 load: STARTUP
-description: Protected standalone lobby and practice server selector.
+description: Protected standalone lobby with Practice and Survival selectors.
 author: AscendingMC
 commands:
   hub:

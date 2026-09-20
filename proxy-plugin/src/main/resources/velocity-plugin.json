@@ -1,0 +1,10 @@
+{
+  "id": "ascending-network",
+  "name": "AscendingNetwork",
+  "version": "0.1.0",
+  "description": "Exact-version admission for AscendingMC Survival",
+  "url": "https://github.com/Lofpy/practice",
+  "authors": ["AscendingMC"],
+  "main": "com.ascendingmc.network.AscendingNetworkPlugin",
+  "dependencies": []
+}

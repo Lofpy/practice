@@ -6,7 +6,7 @@ $pvpRoot = Join-Path $repoRoot 'runtime'
 $networkRoot = Join-Path $repoRoot 'network'
 $markerPath = Join-Path $networkRoot 'enabled.json'
 $pendingPath = Join-Path $networkRoot 'migration-pending.json'
-foreach ($port in @(25565,25566,25567)) {
+foreach ($port in @(25565,25566,25567,25568)) {
     if (Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue) { throw "Port $port is in use. Stop all servers and wait for their processes to exit cleanly first." }
 }
 $journalPath = if (Test-Path -LiteralPath $markerPath -PathType Leaf) { $markerPath } elseif (Test-Path -LiteralPath $pendingPath -PathType Leaf) { $pendingPath } else { throw 'No enabled network or interrupted migration was found.' }

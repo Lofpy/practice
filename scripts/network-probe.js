@@ -142,10 +142,10 @@ function legacyLogin(port, protocol) {
 (async () => {
   const port = Number(process.argv[2] || '25565');
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw Error('Invalid port');
-  for (const protocol of [5, 47, 107, 340, 754, 763, 772, 776]) console.log('STATUS_PASS', JSON.stringify(await status(port, protocol)));
+  for (const protocol of [5, 47, 107, 340, 754, 763, 772, 776, 777]) console.log('STATUS_PASS', JSON.stringify(await status(port, protocol)));
   if (process.argv.includes('--auth-check')) console.log('AUTH_PASS', JSON.stringify(await authenticationRequired(port)));
   if (process.argv.includes('--legacy-login')) {
-    if (port !== 25568) throw Error('Offline login probes are restricted to the isolated loopback proxy on25568');
+    if (port !== 25569) throw Error('Offline login probes are restricted to the isolated loopback proxy on25569');
     for (const protocol of [5,47]) console.log('LEGACY_LOGIN_PASS', JSON.stringify(await legacyLogin(port, protocol)));
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });
