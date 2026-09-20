@@ -2,17 +2,24 @@
 
 ## 構成と保証範囲
 
-単一Compute Engine VM（Debian 12）でVelocity / Lobby / PvPを動かす。
+単一Compute Engine VM（Debian 12）でVelocity / Lobby / PvP / Survivalを動かす。
+Survivalは26.3専用のPaper ALPHA・Java25で、導入前に追加メモリとディスク容量を確認する。
 停止時間あり。試合状態のライブ移行・無停止更新は行わない。メンテナンス時間を事前告知する。
 
-- 専用VPC。SSHはIAPのTCP 22のみ。バックエンドは127.0.0.1:25566/25567。
+- 専用VPC。SSHはIAPのTCP 22のみ。バックエンドは127.0.0.1:25566/25567/25568。
 - 初期値では25565の許可ルールを作らない。player_cidrsに検証者のIP/32を設定してから検証する。
 - /srv/poppyは別の100GBデータディスク。VM削除保護、データディスク/バックアップバケットのprevent_destroyを使用。
 - 非root UID/GID 10001。読み取り専用コンテナ、書込先はdataとtmpfs。
-- state/{pvp,lobby,proxy}にワールド・設定・レート等を保存。releasesにdigest固定の構成を保存。
+- state/{pvp,lobby,survival,proxy}にワールド・設定・レート等を保存。Survivalの退避ワールドも保存対象。releasesにdigest固定の構成を保存。
 - currentシンボリックリンクが確定リリースを指す。稼働中にソースをgit pullしない。
 - /hub用PoppyLobby bridgeとVia系の設定もPvPに含める。未知/重複JARは起動時に拒否する。
 - デプロイ・OS再起動中はホストファイアウォールでゲーム入口を閉じ、全サービスの準備完了後だけ開く。
+
+Survivalを加えた既定のJava最大ヒープは合計7.5GiB（PvP 4G、Lobby 1G、Survival 2G、Proxy 512M）。
+これにJavaのヒープ外メモリ、PostgreSQL、OS、バックアップ処理が必要になるため、実VMの空きメモリを確認する。
+本機能の追加ではVMサイズ、ディスク、公開ポート、IAM権限を自動変更しない。
+Survivalイメージも既存の`poppy` Artifact Registry内に置くので、新しいRegistry権限は不要。
+既存100GBディスクの利用量とバックアップ増加量を確認し、容量変更が必要なら別途承認・計画する。
 
 ## 0. 手動承認機能の前提（先に確認）
 
@@ -73,7 +80,7 @@ productionへ以下を設定する。SA JSONキーやSSH秘密鍵をGitHubへ登
 WIFはリポジトリ/所有者の数値ID、main、production、指定workflow、手動起動イベントを制限する。
 デプロイSAは対象Artifact Registryへの書込、対象VMの管理ログイン、対象IAPトンネルのみ。
 Computeのメタデータ読取はproject範囲。VMのroot権限はデプロイに必要なため明示している。
-VMのSAは対象Registry読取とバックアップ作成のみ。バックアップの上書き/削除権限は持たない。
+VMのSAは対象Registry読取と対象バックアップバケットの作成・読取権限を持つ。バックアップの上書き/削除権限は持たない。
 
 ## 3. 初回データ移行とEULA（デプロイ前）
 
@@ -85,6 +92,7 @@ VMのSAは対象Registry読取とバックアップ作成のみ。バックア�
 | runtime | /srv/poppy/state/pvp |
 | network/lobby | /srv/poppy/state/lobby |
 | network/proxy | /srv/poppy/state/proxy |
+| network/survival（既存データがある場合） | /srv/poppy/state/survival |
 
 実行JAR、Windows起動スクリプト、キャッシュ/ログは移行不要。
 plugins内のJARは新イメージが管理する。ProtocolSupport、バージョン付きの旧PoppyPractice JAR、
@@ -96,12 +104,23 @@ plugins内のJARは新イメージが管理する。ProtocolSupport、バージ�
 Minecraft EULAを読み同意する場合だけeula=trueとする。CI/起動スクリプトは同意を自動生成しない。
 既存の同意ファイルを移行してよいかは運営者が判断する。
 
+Survivalを初めて追加する場合、`state/survival`が存在しない状態にしておく。
+初回更新では全停止・整合バックアップ完了後に同ディレクトリを作成し、既存の`state/pvp/eula.txt`をそのままコピーする。
+同意を新規生成する処理ではない。既存のSurvivalディレクトリがある場合は、その`eula.txt`もデプロイ前に検証する。
+既存の`eula=false`や同意ファイルの欠落は自動修正せず、旧環境を停止する前に中止する。
+bootstrapがSurvivalの空ディレクトリを作らないのは、この区別を保つため。
+
 既存設定は上書きしない。次の設定を移行先で確認する。
 
-- proxy: online-mode=true、bind=0.0.0.0:25565、LEGACY転送、lobby/pvp宛先は127.0.0.1。
-- backend: server-ip=127.0.0.1、online-mode=false、enable-rcon=false、portは25566/25567。
+- proxy: online-mode=true、bind=0.0.0.0:25565、LEGACY転送、lobby/pvp/survival宛先は127.0.0.1。
+- backend: server-ip=127.0.0.1、online-mode=false、enable-rcon=false、portは25566/25567/25568。
 - backend spigot.yml: settings.bungeecord=true。
+- Survival: enforce-secure-profile=false、Paper proxies.bungee-cord.online-mode=true、proxies.velocity.enabled=false。Via系は配置しない。
+- ProxyのAscendingNetworkは26.3/protocol777の元クライアントだけをSurvivalへ許可する。
 - PvP plugins/PoppyLobby/config.ymlはnetwork-template/pvp-lobby.ymlのbridge用設定。
+
+既存Proxyの`[servers]`に`survival`が存在しない場合だけ、バックアップ後に`127.0.0.1:25568`を追加する。
+異なるSurvival宛先が既にある場合は上書きせず、起動検証を失敗させてロールバックする。
 
 不一致の場合は起動を拒否する。バックエンドのonline-mode=falseだけを単体公開しない。
 初回移行データにもシンボリックリンク/特殊ファイルを含めない（整合バックアップは拒否する）。
@@ -121,15 +140,18 @@ Registryの旧リリースを手動/自動削除しない。current/前世代の
 ホスト側の更新順:
 
 1. ファイルロック、イメージ取得、EULA確認（ここまでは旧環境を停止しない）。
-2. 入口を閉鎖。proxyのend → lobbyのstop → pvpのstop。各終了を確認。
+2. 入口を閉鎖。proxyのend → survivalのstop → lobbyのstop → pvpのstop。旧3サービス構成ではSurvivalを除く。各終了を確認。
 3. タイムアウトならkillせず中止。journalを残し、入口を閉じたまま運営者へ返す。
-4. 全writer停止後にstateをアーカイブしchecksumを計算。GCSへ世代0条件で保存。
-5. 新PvP → Lobby → Proxyを起動。plugin有効化ログとMinecraft status応答でreadiness確認。
+4. 全ゲームwriterとPostgreSQLの正常停止後にstate・DBをアーカイブしchecksumを計算。GCSへ世代0条件で保存。
+5. DBの接続確認後、新PvP → Lobby → Survival → Proxyを起動。plugin有効化ログとMinecraft status応答でreadiness確認。
 6. 全て成功したらcurrentを原子的に切替え、journalを消して入口を開く。
 7. 起動失敗なら新writerを正常停止、失敗stateを退避、バックアップを検証/復元し旧digestを起動。
 
 バックアップ作成/転送失敗時はアップグレードせず旧環境を再開する。
 新環境を正常停止できない場合、復元を強行しない。
+起動・停止するサービスは各リリースのmanifestから決めるため、4サービスへの初回更新に失敗しても旧3サービスのdigestへ戻せる。
+SurvivalのreadinessはAscendingSurvivalの有効化とprotocol777の応答、Proxyは26.3/protocol777ゲートの有効化も必須。
+設定不正でゲートが閉鎖状態になった場合、Proxyのポートが開いただけでは更新成功にしない。
 CIの接続が切れてもsystemd上の更新は継続する。再起動等で中断された処理はjournalが残り、
 自動再開しない。GitHubの赤表示だけを見て別デプロイを連打しない。
 
@@ -161,17 +183,18 @@ journalを手動で削除して稼働中のデータへ復元を行わない。
 
 ローカルディスク故障では管理者の資格情報でGCSからアーカイブ/checksumを別の場所へ取得し、
 内容/UID/GIDを確認して停止中の新しいデータディスクへ復元する。
-VMのSAにはbackup読取/削除権限を追加しない。元ディスクを捨てず、復旧対象を確認する。
+VMのSAへ新しい権限を追加して回避せず、既存の対象バケット読取権限または運営者の資格情報で確認する。元ディスクを捨てず、復旧対象を確認する。
 
 ## 検証の区分
 
-CIはTerraformの構文/プロバイダ検証、両Mavenテスト、デプロイ異常系、
-3イメージのbuild、非root/entrypoint、EULA未同意時の拒否、Velocityの実起動/status/正常終了を検査する。
+CIはTerraformの構文/プロバイダ検証、Java8のPractice/LobbyとJava25のSurvival/ProxyのMavenテスト、デプロイ異常系、
+4イメージのbuild、非root/entrypoint、EULA未同意時の拒否、Velocityの実起動/ゲート初期化/status/正常終了を検査する。
 CIではMinecraft EULAに同意せず、実バックエンドのworld/plugin起動は行わない。
 
-GCPプロジェクト未作成のため、初回plan、IAP/OS Login/WIF、GCS転送、実ディスク、
-Java17上の実バックエンド、実クライアントのlobby↔pvp、レート/KB保持、
-本番相当の正常停止/失敗時復元、VM再起動は運営者の承認とEULA同意後の検証が必要。
+初回構築ではplan、IAP/OS Login/WIF、GCS転送、実ディスク、Java17の旧バックエンド、
+Java25のSurvival、実クライアントのlobby↔pvp/lobby↔survival、旧版のSurvival拒否、レート/KB保持、
+本番相当の正常停止/失敗時復元、VM再起動を運営者の承認とEULA同意後に検証する。
+既存本番へのSurvival追加も、既存のデプロイ成功だけで新モードの稼働を確認したことにはならない。
 ゲーム入口の一般公開はこれらが終わった後にする。CI成功と本番投入可能は同義ではない。
 # PostgreSQLを利用する既存サーバーの追加要件
 

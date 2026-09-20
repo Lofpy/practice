@@ -38,6 +38,16 @@ services:
     <<: *runtime
     image: ${LOBBY_IMAGE:?digest required}
     volumes: ["${DATA_ROOT:?persistent mount required}/state/lobby:/data"]
+  survival:
+    <<: *runtime
+    image: ${SURVIVAL_IMAGE:?digest required}
+    volumes: ["${DATA_ROOT:?persistent mount required}/state/survival:/data"]
+    healthcheck:
+      test: ["CMD", "python3", "/opt/poppy/runtime.py", "health"]
+      interval: 5s
+      timeout: 5s
+      start_period: 180s
+      retries: 12
   proxy:
     <<: *runtime
     image: ${PROXY_IMAGE:?digest required}

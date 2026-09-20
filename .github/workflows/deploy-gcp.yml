@@ -66,7 +66,7 @@ jobs:
           gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
           mkdir bundle
           jq -n --arg id "$RELEASE_ID" --arg sha "$GITHUB_SHA" '{release_id:$id,commit:$sha,images:{}}' > bundle/release.json
-          for service in pvp lobby proxy; do
+          for service in pvp lobby survival proxy; do
             image="$IMAGE_BASE/$service:$RELEASE_ID"
             docker push "$image"
             digest=$(docker image inspect "$image" --format '{{json .RepoDigests}}' | jq -er '.[0]')

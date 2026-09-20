@@ -15,6 +15,7 @@ enable-player-address-logging = false
 [servers]
 lobby = "127.0.0.1:25567"
 pvp = "127.0.0.1:25566"
+survival = "127.0.0.1:25568"
 try = ["lobby"]
 
 [forced-hosts]

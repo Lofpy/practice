@@ -1,0 +1,17 @@
+name: AscendingSurvival
+version: 0.1.0
+main: com.ascendingmc.survival.AscendingSurvivalPlugin
+api-version: '26.3'
+description: AscendingMC Survival world management, sidebar, and lobby bridge.
+commands:
+  sworld:
+    description: Manage Survival worlds
+    usage: /sworld
+    permission: ascending.survival.admin
+  hub:
+    description: Return to the network lobby
+    aliases: [lobby]
+permissions:
+  ascending.survival.admin:
+    description: Create, configure, edit, archive and restore Survival worlds
+    default: op

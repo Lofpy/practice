@@ -2,12 +2,21 @@
 ARG BUILD_JAVA=eclipse-temurin:8-jdk
 ARG BACKEND_JAVA=eclipse-temurin:17-jre
 ARG PROXY_JAVA=eclipse-temurin:25-jre
+ARG MODERN_BUILD_JAVA=eclipse-temurin:25-jdk
 FROM ${BUILD_JAVA} AS build
 WORKDIR /src
 RUN apt-get update && apt-get install -y --no-install-recommends maven && rm -rf /var/lib/apt/lists/*
 COPY . .
 RUN mkdir -p runtime && cp .build/windspigot.jar runtime/windspigot.jar \
  && mvn --batch-mode verify && mvn --batch-mode -f lobby-plugin/pom.xml verify
+
+FROM ${MODERN_BUILD_JAVA} AS modern-build
+WORKDIR /src
+RUN apt-get update && apt-get install -y --no-install-recommends maven && rm -rf /var/lib/apt/lists/*
+COPY survival-plugin survival-plugin
+COPY proxy-plugin proxy-plugin
+RUN mvn --batch-mode -f survival-plugin/pom.xml verify \
+ && mvn --batch-mode -f proxy-plugin/pom.xml verify
 
 FROM ${BACKEND_JAVA} AS backend
 RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-yaml python3-toml \
@@ -43,10 +52,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 python3
  && mkdir -p /opt/poppy/defaults /data /run/poppy \
  && chown -R 10001:10001 /data /run/poppy
 COPY .build/velocity.jar /opt/poppy/server.jar
+COPY --from=modern-build /src/proxy-plugin/target/AscendingNetwork-0.1.0.jar /opt/poppy/plugins/AscendingNetwork.jar
+COPY proxy-plugin/src/main/resources/config.properties /opt/poppy/defaults/plugins/ascending-network/config.properties
 COPY network-template/proxy/velocity.toml /opt/poppy/defaults/velocity.toml
 COPY deploy/runtime.py /opt/poppy/runtime.py
 COPY --chmod=0755 deploy/entrypoint.sh /usr/local/bin/poppy-entrypoint
 WORKDIR /data
 USER 10001:10001
 ENV SERVER_KIND=proxy JAVA_MEMORY=512M SERVER_PORT=25565
+ENTRYPOINT ["poppy-entrypoint"]
+
+# Survival is intentionally independent from the legacy WindSpigot/Via backends.
+FROM ${PROXY_JAVA} AS survival
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-yaml python3-toml \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /opt/poppy/defaults /opt/poppy/plugins /data /run/poppy \
+ && chown -R 10001:10001 /data /run/poppy
+COPY .build/paper.jar /opt/poppy/server.jar
+COPY --from=modern-build /src/survival-plugin/target/AscendingSurvival-0.1.0.jar /opt/poppy/plugins/AscendingSurvival.jar
+COPY network-template/survival/server.properties network-template/survival/spigot.yml /opt/poppy/defaults/
+COPY network-template/survival/config/paper-global.yml /opt/poppy/defaults/config/paper-global.yml
+COPY server-template/eula.txt /opt/poppy/defaults/eula.txt
+COPY deploy/runtime.py /opt/poppy/runtime.py
+COPY --chmod=0755 deploy/entrypoint.sh /usr/local/bin/poppy-entrypoint
+WORKDIR /data
+USER 10001:10001
+ENV SERVER_KIND=survival JAVA_MEMORY=2G SERVER_PORT=25568
 ENTRYPOINT ["poppy-entrypoint"]

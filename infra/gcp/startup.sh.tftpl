@@ -33,6 +33,9 @@ uuid=$(blkid -s UUID -o value "$device")
 grep -q "UUID=$uuid /srv/poppy " /etc/fstab ||
   echo "UUID=$uuid /srv/poppy ext4 defaults 0 2" >> /etc/fstab
 mountpoint -q /srv/poppy || mount /srv/poppy
+# Survival is deliberately created by deploy.py only after the pre-upgrade backup,
+# reusing the operator's accepted PvP EULA. Do not pre-create an empty Survival
+# directory here: existing directories require their own valid acceptance file.
 for name in pvp lobby proxy; do
   install -d -o 10001 -g 10001 -m 0750 "/srv/poppy/state/$name"
 done

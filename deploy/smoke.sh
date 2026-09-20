@@ -6,12 +6,12 @@ runtime_flags=(--read-only --cap-drop=ALL --security-opt=no-new-privileges
   --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777
   --tmpfs /run/poppy:rw,nosuid,nodev,size=1m,uid=10001,gid=10001
   --tmpfs /data:rw,nosuid,nodev,size=256m,uid=10001,gid=10001)
-for service in pvp lobby proxy; do
+for service in pvp lobby survival proxy; do
   image="$base/$service:$tag"
   docker run --rm "${runtime_flags[@]}" --entrypoint sh "$image" -c 'test "$(id -u)" = 10001 && test -x /usr/local/bin/poppy-entrypoint && python3 -c "import yaml,toml"'
 done
 # Do not accept Minecraft EULA in CI. Backends MUST refuse an unaccepted EULA.
-for service in pvp lobby; do
+for service in pvp lobby survival; do
   if docker run --rm "${runtime_flags[@]}" "$base/$service:$tag" > ".build/$service-eula.log" 2>&1; then
     echo "Backend unexpectedly started without EULA acceptance" >&2
     exit 1

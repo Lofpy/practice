@@ -7,11 +7,15 @@ if (-not (Test-Path -LiteralPath (Join-Path $networkRoot 'enabled.json'))) {
     throw 'Run scripts/setup-network.ps1, stop the existing server, then run scripts/enable-network.ps1 first.'
 }
 $definitions = @(
-    @{ Name='pvp'; Directory=(Join-Path $repoRoot 'runtime'); Port=25566; Stop='stop' },
-    @{ Name='lobby'; Directory=(Join-Path $networkRoot 'lobby'); Port=25567; Stop='stop' },
-    @{ Name='proxy'; Directory=(Join-Path $networkRoot 'proxy'); Port=25565; Stop='end' }
+    @{ Name='pvp'; Directory=(Join-Path $repoRoot 'runtime'); Port=25566; Stop='stop'; Ready='PoppyPractice 0.1.0 enabled.' },
+    @{ Name='lobby'; Directory=(Join-Path $networkRoot 'lobby'); Port=25567; Stop='stop'; Ready='Standalone lobby enabled.' },
+    @{ Name='survival'; Directory=(Join-Path $networkRoot 'survival'); Port=25568; Stop='stop'; Ready='AscendingSurvival 0.1.0 enabled.' },
+    @{ Name='proxy'; Directory=(Join-Path $networkRoot 'proxy'); Port=25565; Stop='end'; Ready='AscendingNetwork enabled: Survival requires Minecraft 26.3 (protocol 777)' }
 )
 foreach ($definition in $definitions) {
+    if (-not (Test-Path -LiteralPath (Join-Path $definition.Directory 'run.bat'))) {
+        throw "Missing $($definition.Name)/run.bat. Complete setup-network.ps1 before starting any servers."
+    }
     if (Get-NetTCPConnection -State Listen -LocalPort $definition.Port -ErrorAction SilentlyContinue) {
         throw "Port $($definition.Port) is already used; no duplicate servers were started."
     }
@@ -63,7 +67,7 @@ try {
         $process.BeginOutputReadLine()
         $process.BeginErrorReadLine()
         $running[$definition.Name] = @{ Process=$process; Stop=$definition.Stop }
-        $deadline = (Get-Date).AddSeconds(60)
+        $deadline = (Get-Date).AddSeconds(240)
         $nativeLog = Join-Path $definition.Directory 'logs\latest.log'
         while ($true) {
             if ($process.HasExited) { throw "$($definition.Name) exited before opening its port. See $logPath" }
@@ -71,13 +75,14 @@ try {
             $listening = Get-NetTCPConnection -State Listen -LocalPort $definition.Port -ErrorAction SilentlyContinue
             $logFile = Get-Item -LiteralPath $nativeLog -ErrorAction SilentlyContinue
             if ($listening -and $logFile -and $logFile.LastWriteTimeUtc -ge $process.StartTime.ToUniversalTime() -and
-                (Select-String -LiteralPath $nativeLog -Pattern 'Done \(' -Quiet)) { break }
+                (Select-String -LiteralPath $nativeLog -Pattern 'Done \(' -Quiet) -and
+                (Select-String -LiteralPath $nativeLog -Pattern $definition.Ready -SimpleMatch -Quiet)) { break }
             # WindSpigot binds its port before loading worlds/plugins; do not open the entry point early.
             Start-Sleep -Milliseconds 250
         }
         Write-Host "$($definition.Name) started through run.bat on port $($definition.Port)."
     }
-    Write-Host 'Poppy Network running. Commands: pvp <command>, lobby <command>, proxy <command>, status, stopall'
+    Write-Host 'AscendingMC running. Commands: pvp <command>, lobby <command>, survival <command>, proxy <command>, status, stopall'
     while ($true) {
         Write-Host 'network> ' -NoNewline
         $inputTask = [PoppyNetworkConsoleInput]::ReadLineAsync()
@@ -86,21 +91,21 @@ try {
         $line = $inputTask.GetAwaiter().GetResult()
         if ($null -eq $line -or $line -eq 'stopall') { break }
         if ($line -eq 'status') {
-            foreach ($name in @('pvp','lobby','proxy')) { Write-Host "$name running=$(-not $running[$name].Process.HasExited)" }
+            foreach ($name in @('pvp','lobby','survival','proxy')) { Write-Host "$name running=$(-not $running[$name].Process.HasExited)" }
             continue
         }
-        if ($line -match '^(pvp|lobby|proxy)\s+(.+)$') {
+        if ($line -match '^(pvp|lobby|survival|proxy)\s+(.+)$') {
             $child = $running[$Matches[1]].Process
             if ($child.HasExited) { Write-Warning 'That server has stopped.'; continue }
             try {
                 $child.StandardInput.WriteLine($Matches[2])
                 $child.StandardInput.Flush()
             } catch { Write-Warning "That server's console closed: $_" }
-        } elseif ($line) { Write-Host 'Use: pvp list | lobby list | proxy velocity info | status | stopall' }
+        } elseif ($line) { Write-Host 'Use: pvp list | lobby list | survival list | proxy velocity info | status | stopall' }
     }
 } finally {
-    # Close the entry point first, then save both backends. Never forcibly kill a world writer.
-    foreach ($name in @('proxy','lobby','pvp')) {
+    # Close the entry point first, then save every backend. Never forcibly kill a world writer.
+    foreach ($name in @('proxy','survival','lobby','pvp')) {
         if ($running.ContainsKey($name) -and -not $running[$name].Process.HasExited) {
             try {
                 $running[$name].Process.StandardInput.WriteLine($running[$name].Stop)
@@ -108,9 +113,9 @@ try {
             } catch { Write-Warning "Could not send $name its normal stop command: $_" }
         }
     }
-    foreach ($name in @('proxy','lobby','pvp')) {
+    foreach ($name in @('proxy','survival','lobby','pvp')) {
         if ($running.ContainsKey($name)) {
-            $saveDeadline = (Get-Date).AddSeconds(60)
+            $saveDeadline = (Get-Date).AddSeconds(240)
             while (-not $running[$name].Process.HasExited -and (Get-Date) -lt $saveDeadline) {
                 Start-Sleep -Milliseconds 250
             }

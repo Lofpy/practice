@@ -59,13 +59,13 @@ import org.bukkit.scoreboard.Team;
 public final class PoppyLobbyPlugin extends JavaPlugin implements Listener {
     private static final String CHANNEL = "BungeeCord";
     private static final String BUILD_PERMISSION = "poppylobby.build";
-    private static final int PRACTICE_SLOT = 13;
     private final Set<UUID> builders = new HashSet<UUID>();
     private final Map<UUID, Long> lastConnect = new HashMap<UUID, Long>();
     private final Map<UUID, Scoreboard> scoreboards = new HashMap<UUID, Scoreboard>();
     private boolean lobbyMode;
     private String worldName;
     private byte[] practiceMessage;
+    private byte[] survivalMessage;
     private byte[] hubMessage;
     private BukkitTask scoreboardTask;
 
@@ -82,6 +82,7 @@ public final class PoppyLobbyPlugin extends JavaPlugin implements Listener {
             hubMessage = ProxyConnectMessage.encode(getConfig().getString("hub-server", "lobby"));
             if (lobbyMode) {
                 practiceMessage = ProxyConnectMessage.encode(getConfig().getString("practice-server", "pvp"));
+                survivalMessage = ProxyConnectMessage.encode(getConfig().getString("survival-server", "survival"));
             }
         } catch (IllegalArgumentException invalid) {
             getLogger().severe(invalid.getMessage());
@@ -94,6 +95,7 @@ public final class PoppyLobbyPlugin extends JavaPlugin implements Listener {
             return;
         }
         registerLobbyCommand("pvp", Collections.<String>emptyList(), "Connect to Practice");
+        registerLobbyCommand("survival", Collections.<String>emptyList(), "Connect to Survival (Minecraft 26.3 only)");
         registerLobbyCommand("lobby", Arrays.asList("spawn"), "Return to the lobby spawn");
         registerLobbyCommand("lobbybuild", Collections.<String>emptyList(), "Toggle protected lobby editing");
         getServer().getPluginManager().registerEvents(this, this);
@@ -177,6 +179,8 @@ public final class PoppyLobbyPlugin extends JavaPlugin implements Listener {
             returnToSpawn(player);
         } else if ("pvp".equalsIgnoreCase(name)) {
             connect(player, practiceMessage, "Practice");
+        } else if ("survival".equalsIgnoreCase(name)) {
+            connect(player, survivalMessage, "Survival");
         } else if ("lobbybuild".equalsIgnoreCase(name)) {
             if (!player.hasPermission(BUILD_PERMISSION)) {
                 player.sendMessage(color("&cこのコマンドを使用する権限がありません。"));
@@ -298,8 +302,10 @@ public final class PoppyLobbyPlugin extends JavaPlugin implements Listener {
         for (int slot = 0; slot < holder.inventory.getSize(); slot++) {
             holder.inventory.setItem(slot, filler);
         }
-        holder.inventory.setItem(PRACTICE_SLOT, item(Material.DIAMOND_SWORD, "&c&lPractice",
+        holder.inventory.setItem(LobbyDestination.PRACTICE.slot(), item(Material.DIAMOND_SWORD, "&c&lPractice",
                 "&7PvP / Bot / Kit / Queue", "", "&eクリックして参加"));
+        holder.inventory.setItem(LobbyDestination.SURVIVAL.slot(), item(Material.GRASS, "&c&lSurvival",
+                "&7建築 / 探索 / サバイバル", "&fMinecraft &c26.3 &f専用", "", "&eクリックして参加"));
         player.openInventory(holder.inventory);
     }
 
@@ -405,11 +411,13 @@ public final class PoppyLobbyPlugin extends JavaPlugin implements Listener {
         final Player player = (Player) event.getWhoClicked();
         if (event.getView().getTopInventory().getHolder() instanceof SelectorHolder) {
             event.setCancelled(true);
-            if (event.getRawSlot() == PRACTICE_SLOT && event.isLeftClick() && !event.isShiftClick()) {
+            final LobbyDestination destination = LobbyDestination.atSlot(event.getRawSlot());
+            if (destination != null && event.isLeftClick() && !event.isShiftClick()) {
                 Bukkit.getScheduler().runTask(this, new Runnable() {
                     @Override public void run() {
                         if (player.isOnline() && inLobby(player.getWorld())) {
-                            connect(player, practiceMessage, "Practice");
+                            connect(player, destination == LobbyDestination.PRACTICE ? practiceMessage : survivalMessage,
+                                    destination.displayName());
                         }
                     }
                 });

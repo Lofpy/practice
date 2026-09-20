@@ -6,5 +6,7 @@ hub-server: lobby
 world-name: lobby
 # Must match the proxy's backend server name, not its public address.
 practice-server: pvp
+# Requires the AscendingNetwork proxy gate; older clients remain in the lobby.
+survival-server: survival
 scoreboard-title: '&c&lAscendingMC'
-welcome-message: '&cAscendingMC &7へようこそ！ &fコンパスから Practice に参加できます。'
+welcome-message: '&cAscendingMC &7へようこそ！ &fコンパスから Practice / Survival に参加できます。'

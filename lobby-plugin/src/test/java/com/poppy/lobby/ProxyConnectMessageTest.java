@@ -14,6 +14,7 @@ public class ProxyConnectMessageTest {
     }
     @Test public void acceptsLobbyAndConventionalNames() {
         assertNotNull(ProxyConnectMessage.encode("lobby"));
+        assertNotNull(ProxyConnectMessage.encode("survival"));
         assertNotNull(ProxyConnectMessage.encode("practice-1_US"));
     }
     @Test public void rejectsUnsafeOrMissingNames() {
