@@ -112,7 +112,7 @@ final class BotNodebuffConsumables {
         if (consuming != null) finishUse();
     }
 
-    /** Healing takes priority, including interrupting an unfinished drink/meal. */
+    /** Healing takes priority, including interrupting an unfinished drink. */
     boolean tickUse(boolean healingNeeded) {
         if (retryTicks > 0) retryTicks--;
         if (healingNeeded) {
@@ -129,24 +129,12 @@ final class BotNodebuffConsumables {
             }
         }
         if (retryTicks > 0 || bot.dead || bot.getHealth() <= 0.0F) return false;
-        int food = bot.getBukkitEntity().getFoodLevel();
-        if (food <= 14 && beginFood()) return true;
         MobEffect speed = bot.getEffect(MobEffectList.FASTER_MOVEMENT);
         if (speed == null || speed.getAmplifier() < 1 || speed.getDuration() <= SPEED_REFRESH_TICKS) {
             for (int slot = 0; slot < 36; slot++) {
                 if (isSpeedTwoPotion(bot.inventory.getItem(slot))) {
                     return beginUse(slot, 3);
                 }
-            }
-        }
-        return false;
-    }
-
-    private boolean beginFood() {
-        for (int slot = 0; slot < 36; slot++) {
-            ItemStack stack = bot.inventory.getItem(slot);
-            if (stack != null && stack.count > 0 && stack.getItem() == Items.GOLDEN_CARROT) {
-                return beginUse(slot, 8);
             }
         }
         return false;
@@ -164,7 +152,7 @@ final class BotNodebuffConsumables {
         consumingSlot = slot;
         useTicks = 0;
         bot.inventory.itemInHandIndex = slot;
-        // The native 32-tick countdown also publishes drinking/eating metadata.
+        // The native 32-tick countdown also publishes drinking metadata.
         bot.a(stack, stack.l());
         return true;
     }

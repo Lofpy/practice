@@ -12,7 +12,10 @@ import java.util.UUID;
 
 /** Transparent local calibration against our fixed bot, not an external competitive tier. */
 public final class TierAssessment {
-    public static final String MODEL_VERSION = "fixed-hard-v1";
+    public static final String MODEL_VERSION = "fixed-balanced-v2";
+    /** Easier placement calibration; measured percentages and relative weights stay unchanged. */
+    public static final double SCORE_MULTIPLIER = 1.2D;
+    private final double rawScore;
     private final double score;
     private final Map<String, Double> metrics;
     private final Map<String, Double> weights;
@@ -27,7 +30,8 @@ public final class TierAssessment {
             weightedScore += clamp(entry.getValue()) * weight;
             totalWeight += weight;
         }
-        score = totalWeight == 0.0D ? 0.0D : clamp(weightedScore / totalWeight);
+        rawScore = totalWeight == 0.0D ? 0.0D : clamp(weightedScore / totalWeight);
+        score = clamp(rawScore * SCORE_MULTIPLIER);
     }
 
     public static TierAssessment assess(String kitId, UUID playerId, MatchResult result) {
@@ -71,6 +75,7 @@ public final class TierAssessment {
     }
 
     public double getScore() { return score; }
+    public double getRawScore() { return rawScore; }
     public Map<String, Double> getMetrics() { return metrics; }
     public Map<String, Double> getWeights() { return weights; }
 }

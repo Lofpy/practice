@@ -14,6 +14,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 
+import java.util.UUID;
+
 public final class FoodListener implements Listener {
     private final ProfileManager profileManager;
     private final MatchManager matchManager;
@@ -42,7 +44,7 @@ public final class FoodListener implements Listener {
         if (botMatch == null && botService != null) {
             botMatch = botService.getByBot(player.getUniqueId());
         }
-        if (shouldKeepFullHunger(profile, match, botMatch)) {
+        if (shouldKeepFullHunger(player.getUniqueId(), profile, match, botMatch)) {
             event.setCancelled(true);
             player.setFoodLevel(20);
             player.setSaturation(20.0F);
@@ -50,9 +52,15 @@ public final class FoodListener implements Listener {
         }
     }
 
-    static boolean shouldKeepFullHunger(PlayerProfile profile, Match match, BotMatch botMatch) {
+    static boolean shouldKeepFullHunger(UUID playerId, PlayerProfile profile,
+                                        Match match, BotMatch botMatch) {
+        // NPCs skip hunger-driven eating. Keep sprint available without
+        // exempting human opponents; Combo still uses combat-healing apples.
+        if (botMatch != null && botMatch.getBotEntityId().equals(playerId)) {
+            return true;
+        }
         if (botMatch != null && !botMatch.isBoxing() && botMatch.getState() == MatchState.FIGHTING) {
-            // NPCs have no PlayerProfile; NoDebuff and Combo both use native hunger.
+            // Human opponents still use native hunger.
             return false;
         }
         return profile == null || profile.getState() != PlayerState.FIGHTING

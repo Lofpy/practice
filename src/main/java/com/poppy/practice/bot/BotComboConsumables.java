@@ -10,7 +10,6 @@ import net.minecraft.server.v1_8_R3.MobEffectList;
 /** Uses only the finite items supplied by ComboKit; it never manufactures healing. */
 final class BotComboConsumables {
     private static final int APPLE_SLOT = 2;
-    private static final int CARROT_SLOT = 8;
     private static final int REFRESH_REGENERATION_TICKS = 64;
     private static final int APPLE_RETRY_TICKS = 80;
     private static final int STALLED_USE_GRACE_TICKS = 5;
@@ -63,12 +62,6 @@ final class BotComboConsumables {
         if (isEnchantedApple(apple) && shouldEatApple(regenerationTicks,
                 bot.getHealth(), bot.getAbsorptionHearts())) {
             beginUse(APPLE_SLOT, apple);
-            return true;
-        }
-        ItemStack carrot = bot.inventory.getItem(CARROT_SLOT);
-        if (carrot != null && carrot.count > 0 && carrot.getItem() == Items.GOLDEN_CARROT
-                && bot.getBukkitEntity().getFoodLevel() <= 12) {
-            beginUse(CARROT_SLOT, carrot);
             return true;
         }
         return false;

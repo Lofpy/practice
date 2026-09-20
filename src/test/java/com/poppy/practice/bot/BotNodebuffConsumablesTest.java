@@ -107,23 +107,30 @@ public class BotNodebuffConsumablesTest {
         verify(f.bot).a(spare, 32);
     }
 
-    @Test public void hungerStartsARealMealBeforeADrink() {
+    @Test public void hungerDoesNotDelaySpeedDrinkingOrConsumeCarrots() {
         Fixture f = new Fixture();
         ItemStack food = new ItemStack(Items.GOLDEN_CARROT, 64);
+        ItemStack speed = speed();
         f.bot.inventory.setItem(8, food);
-        f.bot.inventory.setItem(3, speed());
+        f.bot.inventory.setItem(3, speed);
         when(f.player.getFoodLevel()).thenReturn(14);
         assertTrue(f.consumables.tickUse(false));
-        verify(f.bot).a(food, 32);
+        verify(f.bot).a(speed, 32);
+        verify(f.bot, never()).a(eq(food), anyInt());
         assertEquals(64, food.count);
+        assertSame(food, f.bot.inventory.getItem(8));
         verify(f.player, never()).setFoodLevel(anyInt());
     }
 
-    @Test public void wellFedBotDoesNotEatAndMissingItemsAreNeverCreated() {
+    @Test public void hungryBotNeverStartsEatingEvenWithoutSpeedPotions() {
         Fixture f = new Fixture();
-        f.bot.inventory.setItem(8, new ItemStack(Items.GOLDEN_CARROT, 64));
+        ItemStack food = new ItemStack(Items.GOLDEN_CARROT, 64);
+        f.bot.inventory.setItem(8, food);
         assertFalse(f.consumables.tickUse(false));
         when(f.player.getFoodLevel()).thenReturn(6);
+        for (int tick = 0; tick < 100; tick++) assertFalse(f.consumables.tickUse(false));
+        assertSame(food, f.bot.inventory.getItem(8));
+        assertEquals(64, food.count);
         f.bot.inventory.setItem(8, null);
         assertFalse(f.consumables.tickUse(false));
         verify(f.bot, never()).a(any(ItemStack.class), anyInt());
