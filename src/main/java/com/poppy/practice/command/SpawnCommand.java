@@ -18,6 +18,11 @@ public final class SpawnCommand implements CommandExecutor {
     private final LobbyService lobbyService;
     private final MessageService messageService;
     private final HitDebugRoomService hitDebugRoomService;
+    private com.poppy.practice.spectator.SpectatorService spectators;
+
+    public void setSpectatorService(com.poppy.practice.spectator.SpectatorService spectators) {
+        this.spectators = spectators;
+    }
 
     public SpawnCommand(ProfileManager profileManager, QueueManager queueManager,
                         LobbyService lobbyService, MessageService messageService,
@@ -36,6 +41,7 @@ public final class SpawnCommand implements CommandExecutor {
             return true;
         }
         Player player = (Player) sender;
+        if (spectators != null && spectators.leave(player, false)) return true;
         PlayerProfile profile = profileManager.getOrCreate(player.getUniqueId());
         if (profile.getState() == PlayerState.STARTING || profile.getState() == PlayerState.FIGHTING
                 || profile.getState() == PlayerState.ENDING) {

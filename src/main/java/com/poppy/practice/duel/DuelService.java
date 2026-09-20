@@ -10,6 +10,8 @@ import com.poppy.practice.service.MatchService;
 import com.poppy.practice.ui.MenuHolder;
 import com.poppy.practice.ui.MenuNavigation;
 import com.poppy.practice.util.ItemBuilder;
+import com.poppy.practice.language.LanguageService;
+import com.poppy.practice.language.PlayerLanguage;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.chat.ClickEvent;
 import org.bukkit.Bukkit;
@@ -29,6 +31,11 @@ public final class DuelService implements Listener, CommandExecutor, TabComplete
     private final ArenaManager arenas;
     private final MatchService matches;
     private final DuelRequests requests = new DuelRequests();
+    private LanguageService languages;
+    public void setLanguageService(LanguageService languages) { this.languages = languages; }
+    private PlayerLanguage language(Player player) {
+        return languages == null ? PlayerLanguage.JAPANESE : languages.language(player);
+    }
     public DuelService(Plugin plugin, ProfileManager profiles, KitManager kits, ArenaManager arenas, MatchService matches) {
         this.plugin = plugin; this.profiles = profiles; this.kits = kits; this.arenas = arenas; this.matches = matches;
     }
@@ -48,44 +55,44 @@ public final class DuelService implements Listener, CommandExecutor, TabComplete
         }
         Player target = Bukkit.getPlayerExact(args[0]);
         if (target == null || target.getUniqueId().equals(player.getUniqueId()) || !available(player) || !available(target)) {
-            player.sendMessage(ChatColor.RED + "Both players must be in the PvP lobby (not queued)."); return true;
+            player.sendMessage(ChatColor.RED + language(player).choose("両者ともPracticeロビーで待機中（キュー参加なし）である必要があります。", "Both players must be in the Practice lobby (not queued).")); return true;
         }
         if (args.length == 2) {
             Kit kit = kits.get(args[1]);
-            if (kit == null) player.sendMessage(ChatColor.RED + "Unknown kit. Choose nodebuff, boxing or combo.");
+            if (kit == null) player.sendMessage(ChatColor.RED + language(player).choose("キットが見つかりません。nodebuff・boxing・comboから選択してください。", "Unknown kit. Choose nodebuff, boxing or combo."));
             else invite(player, target, kit.getId());
-        } else player.openInventory(new Screen(player.getUniqueId(), target.getUniqueId(), kits).getInventory());
+        } else player.openInventory(new Screen(player.getUniqueId(), target.getUniqueId(), kits, language(player)).getInventory());
         return true;
     }
     private void invite(Player sender, Player target, String kit) {
-        if (!available(sender) || !available(target)) { sender.sendMessage(ChatColor.RED + "Player is no longer available."); return; }
+        if (!available(sender) || !available(target)) { sender.sendMessage(ChatColor.RED + language(sender).choose("現在そのプレイヤーと対戦できません。", "Player is no longer available.")); return; }
         DuelRequests.Request request = requests.send(sender.getUniqueId(), target.getUniqueId(), kit, System.currentTimeMillis());
-        if (request == null) { sender.sendMessage(ChatColor.RED + "Wait 3 seconds before sending another request."); return; }
-        sender.sendMessage(ChatColor.GREEN + "Duel request sent to " + target.getName() + " (" + kit + ", 60s). No ELO change.");
-        target.sendMessage(ChatColor.AQUA + sender.getName() + " invited you to " + kit + ". No ELO change. Expires in 60s.");
-        TextComponent accept = new TextComponent(ChatColor.GREEN + "[Accept] ");
+        if (request == null) { sender.sendMessage(ChatColor.RED + language(sender).choose("次のリクエストまで3秒お待ちください。", "Wait 3 seconds before sending another request.")); return; }
+        sender.sendMessage(ChatColor.RED + language(sender).choose(target.getName() + " に対戦リクエストを送りました（" + kit + "・60秒）。ELOは変動しません。", "Duel request sent to " + target.getName() + " (" + kit + ", 60s). No ELO change."));
+        target.sendMessage(ChatColor.RED + language(target).choose(sender.getName() + " から " + kit + " の対戦リクエスト。ELO変動なし・60秒で期限切れ。", sender.getName() + " invited you to " + kit + ". No ELO change. Expires in 60s."));
+        TextComponent accept = new TextComponent(ChatColor.GREEN + language(target).choose("[承認] ", "[Accept] "));
         accept.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/duel accept " + sender.getName()));
-        TextComponent deny = new TextComponent(ChatColor.RED + "[Deny]");
+        TextComponent deny = new TextComponent(ChatColor.RED + language(target).choose("[拒否]", "[Deny]"));
         deny.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/duel deny " + sender.getName()));
         target.spigot().sendMessage(accept, deny);
     }
     private void answer(Player recipient, String name, boolean accept) {
         Player sender = Bukkit.getPlayerExact(name);
         DuelRequests.Request request = sender == null ? null : requests.find(sender.getUniqueId(), recipient.getUniqueId(), System.currentTimeMillis());
-        if (request == null) { recipient.sendMessage(ChatColor.RED + "No active invitation from that player."); return; }
+        if (request == null) { recipient.sendMessage(ChatColor.RED + language(recipient).choose("そのプレイヤーからの有効な招待はありません。", "No active invitation from that player.")); return; }
         if (!accept) {
-            requests.remove(request); recipient.sendMessage(ChatColor.YELLOW + "Duel declined.");
-            sender.sendMessage(ChatColor.YELLOW + recipient.getName() + " declined your duel."); return;
+            requests.remove(request); recipient.sendMessage(ChatColor.YELLOW + language(recipient).choose("対戦リクエストを拒否しました。", "Duel declined."));
+            sender.sendMessage(ChatColor.YELLOW + recipient.getName() + language(sender).choose(" が対戦リクエストを拒否しました。", " declined your duel.")); return;
         }
         if (!available(sender) || !available(recipient)) {
-            recipient.sendMessage(ChatColor.RED + "Both players must be in the PvP lobby (not queued)."); return;
+            recipient.sendMessage(ChatColor.RED + language(recipient).choose("両者ともPracticeロビーで待機中（キュー参加なし）である必要があります。", "Both players must be in the Practice lobby (not queued).")); return;
         }
         Arena arena = arenas.acquireAvailable(request.kit);
-        if (arena == null) { recipient.sendMessage(ChatColor.RED + "No arena available. Try accepting again shortly."); return; }
+        if (arena == null) { recipient.sendMessage(ChatColor.RED + language(recipient).choose("空きアリーナがありません。少し待って再度承認してください。", "No arena available. Try accepting again shortly.")); return; }
         // MatchService owns the arena reservation and rolls back failed starts.
         if (matches.startDuel(request.sender, request.target, request.kit, arena)) {
             requests.removePlayer(request.sender); requests.removePlayer(request.target);
-        } else recipient.sendMessage(ChatColor.RED + "Could not start duel. Please try again.");
+        } else recipient.sendMessage(ChatColor.RED + language(recipient).choose("対戦を開始できませんでした。もう一度お試しください。", "Could not start duel. Please try again."));
     }
     @EventHandler public void quit(PlayerQuitEvent event) { requests.removePlayer(event.getPlayer().getUniqueId()); }
     @EventHandler public void click(InventoryClickEvent event) {
@@ -116,13 +123,13 @@ public final class DuelService implements Listener, CommandExecutor, TabComplete
     private static final class Screen extends MenuHolder {
         final UUID owner, target;
         final Map<Integer,String> kits = new HashMap<Integer,String>();
-        Screen(UUID owner, UUID target, KitManager manager) {
-            super(9, "Duel | Select a Kit"); this.owner = owner; this.target = target;
+        Screen(UUID owner, UUID target, KitManager manager, PlayerLanguage language) {
+            super(9, language.choose("対戦招待 | キット選択", "Duel | Select a Kit")); this.owner = owner; this.target = target;
             int slot = 0;
             for (Kit kit : manager.all()) {
                 kits.put(slot, kit.getId());
                 getInventory().setItem(slot++, new ItemBuilder(kit.getIcon()).durability(kit.getIconDurability())
-                        .name("&b" + kit.getDisplayName()).lore("&7No ELO change. Certification not required.", "&eClick: Send invitation").build());
+                        .name("&c" + kit.getDisplayName()).lore(language.choose("&7ELO変動なし。認定は不要です。", "&7No ELO change. Certification not required."), language.choose("&fクリック: 招待を送る", "&fClick: Send invitation")).build());
             }
         }
     }

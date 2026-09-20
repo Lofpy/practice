@@ -77,7 +77,7 @@ public final class PracticeCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
             plugin.reloadPracticeConfiguration();
-            sender.sendMessage(ChatColor.GREEN + "PoppyPractice configuration reloaded.");
+            sender.sendMessage(ChatColor.RED + "AscendingMC Practice configuration reloaded.");
             return true;
         }
         if (args[0].equalsIgnoreCase("forcestop")) {
@@ -217,7 +217,7 @@ public final class PracticeCommand implements CommandExecutor, TabCompleter {
                     ? ChatColor.GREEN + "enabled" : ChatColor.RED + "disabled"));
             return;
         }
-        sender.sendMessage(ChatColor.DARK_GRAY + "--- " + ChatColor.RED + "PoppyPractice Debug" + ChatColor.DARK_GRAY + " ---");
+        sender.sendMessage(ChatColor.DARK_GRAY + "--- " + ChatColor.RED + "AscendingMC Practice Debug" + ChatColor.DARK_GRAY + " ---");
         sender.sendMessage(ChatColor.GRAY + "Profiles: " + ChatColor.WHITE + profileManager.size());
         for (MatchQueue queue : queueManager.all()) {
             sender.sendMessage(ChatColor.GRAY + "Queue " + queue.getKitId() + ": "

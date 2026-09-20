@@ -84,6 +84,8 @@ public class RankedMatchLifecycleTest {
             assertEquals(MatchState.ENDING, match.getState());
             assertEquals(1650000, f.ratings.getRatingMilli(f.firstId, "nodebuff"));
             assertEquals(1650000, f.ratings.getRatingMilli(f.secondId, "nodebuff"));
+            verify(f.first, never()).sendMessage(contains("ELO ["));
+            verify(f.second, never()).sendMessage(contains("ELO ["));
             f.finishTasks.get(0).run();
             f.assertClean(match);
         }
@@ -300,7 +302,9 @@ public class RankedMatchLifecycleTest {
             }
         }
 
-        @Override public void close() throws Exception { serverField.set(null, previousServer); }
+        @Override public void close() throws Exception {
+            serverField.set(null, previousServer);
+        }
 
         private static Player player(UUID id, String name) {
             Player player = mock(Player.class);

@@ -36,6 +36,19 @@ import static org.mockito.Mockito.*;
 public class MatchScoreboardServiceTest {
     @Rule public final TemporaryFolder temporary = new TemporaryFolder();
 
+    @Test public void duelHidesRatingLinesEvenAfterRankedMatch() throws Exception {
+        try (Fixture fixture = new Fixture()) {
+            RatingService ratings = new RatingService(temporary.getRoot(), Logger.getAnonymousLogger());
+            fixture.service.setRatingService(ratings);
+            UUID own = fixture.viewer.getUniqueId(), other = fixture.opponent.getUniqueId();
+            fixture.service.show(fixture.viewer, fixture.opponent, new Match(own, other, "boxing", "arena"));
+            fixture.service.show(fixture.viewer, fixture.opponent,
+                    new Match(own, other, "boxing", "arena", com.poppy.practice.match.MatchType.DUEL));
+            verify(fixture.board).resetScores(ChatColor.DARK_GREEN.toString());
+            verify(fixture.board).resetScores(ChatColor.DARK_RED.toString());
+        }
+    }
+
     @Test public void wiredRatingServiceRefreshesIndependentLobbyProgressAndElo() throws Exception {
         try (Fixture fixture = new Fixture()) {
             RatingService ratings = new RatingService(temporary.getRoot(), Logger.getAnonymousLogger());
@@ -46,7 +59,7 @@ public class MatchScoreboardServiceTest {
             for (int i = 0; i < 3; i++) { ratings.recordPlacement(id, "nodebuff", UUID.randomUUID(), 50); }
             ratings.recordPlacement(id, "boxing", UUID.randomUUID(), 100);
             fixture.refresh();
-            verify(fixture.teams.get("nodebuff_rating")).setSuffix(ChatColor.AQUA + "1650.000");
+            verify(fixture.teams.get("nodebuff_rating")).setSuffix(ChatColor.RED + "1650.000");
             verify(fixture.teams.get("boxing_rating")).setSuffix(ChatColor.YELLOW + "Tier 1/3");
             verify(fixture.teams.get("combo_rating"), times(1)).setSuffix(ChatColor.YELLOW + "Tier 0/3");
         }
@@ -64,8 +77,8 @@ public class MatchScoreboardServiceTest {
             }
             Match match = new Match(own, other, "boxing", "arena");
             fixture.service.show(fixture.viewer, fixture.opponent, match);
-            verify(fixture.teams.get("self_rating")).setSuffix(ChatColor.AQUA + "1650.000");
-            verify(fixture.teams.get("opponent_rating")).setSuffix(ChatColor.AQUA + "1680.000");
+            verify(fixture.teams.get("self_rating")).setSuffix(ChatColor.RED + "1650.000");
+            verify(fixture.teams.get("opponent_rating")).setSuffix(ChatColor.RED + "1680.000");
             fixture.service.showBotMatch(fixture.viewer, fixture.opponent, fixture.botMatch("boxing"));
             verify(fixture.board).resetScores(ChatColor.DARK_GREEN.toString());
             verify(fixture.board).resetScores(ChatColor.DARK_RED.toString());

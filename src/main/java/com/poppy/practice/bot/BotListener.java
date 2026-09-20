@@ -54,7 +54,6 @@ public final class BotListener implements Listener {
             Player bot = botService.getBot(match);
             reportDamage(match, bot, event);
             if (!event.isCancelled() && bot != null && event.getFinalDamage() >= bot.getHealth()) {
-                event.setCancelled(true);
                 botService.handleBotDefeat(match.getBotEntityId());
             }
             return;
@@ -82,7 +81,6 @@ public final class BotListener implements Listener {
         }
         reportDamage(match, bot, event);
         if (!event.isCancelled() && bot != null && event.getFinalDamage() >= bot.getHealth()) {
-            event.setCancelled(true);
             botService.handleBotDefeat(match.getBotEntityId());
             return;
         }

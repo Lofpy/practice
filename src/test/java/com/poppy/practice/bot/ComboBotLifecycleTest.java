@@ -336,6 +336,8 @@ public class ComboBotLifecycleTest {
     }
 
     private static final class Fixture implements AutoCloseable {
+        private final net.minecraft.server.v1_8_R3.EntityPlayer npcHandle =
+                mock(net.minecraft.server.v1_8_R3.EntityPlayer.class);
         private final Field serverField;
         private final Object previousServer;
         private final Participant human = new Participant("Human", 18);
@@ -415,6 +417,7 @@ public class ComboBotLifecycleTest {
             }
             BotNpc npc = new ObjenesisStd().newInstance(BotNpc.class);
             setField(BotNpc.class, npc, "player", bot.player);
+            setField(BotNpc.class, npc, "handle", npcHandle);
             // Native entity removal is a no-op here; service state and captured players remain real.
             Method register = BotService.class.getDeclaredMethod("register", BotMatch.class,
                     BotNpc.class, BotSettings.class);

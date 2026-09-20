@@ -15,7 +15,6 @@ import org.bukkit.entity.Player;
 import java.util.Random;
 
 final class BotController {
-    private static final int SPLASH_HEALING_TWO_DATA = 16421;
     private static final double HEAL_FACING_TOLERANCE_DEGREES = 8.0D;
     private static final double HEAL_POTION_TRAIL_OFFSET = 0.35D;
     private static final double HEAL_POTION_BACKWARD_SPEED = 0.08D;
@@ -32,8 +31,10 @@ final class BotController {
     private final EntityPlayer targetHandle;
     private final BotSettings settings;
     private final BotCertificationMovement certificationMovement;
+    private final BotCertificationMovement practiceMovement;
     private final boolean consumablesAllowed;
     private final BotComboConsumables comboConsumables;
+    private final BotNodebuffConsumables nodebuffConsumables;
     private final int pearlCooldownDurationTicks;
     private final MatchParticipantStats botStats;
     private final Random random = new Random();
@@ -45,7 +46,7 @@ final class BotController {
     private boolean directCombatFacing;
     private int healCooldown;
     private int healingTicks;
-    private int healingPotions;
+    private long lastReceivedMeleeHits;
     private int enderPearlCooldownTicks;
     private int pearlSwitchBackTicks;
     private int pearlSideDirection;
@@ -85,8 +86,12 @@ final class BotController {
         this.settings = settings;
         this.certificationMovement = settings.isCertificationMovement()
                 ? new BotCertificationMovement(settings) : null;
+        this.practiceMovement = !settings.isCertificationMovement()
+                ? new BotCertificationMovement(settings) : null;
         this.consumablesAllowed = !BoxingRules.isBoxing(kitId);
         this.comboConsumables = ComboRules.isCombo(kitId) ? new BotComboConsumables(bot) : null;
+        this.nodebuffConsumables = "nodebuff".equalsIgnoreCase(kitId)
+                ? new BotNodebuffConsumables(bot, settings.getHealingPotionCount()) : null;
         this.pearlCooldownDurationTicks = pearlCooldownTicks(kitId, settings);
         this.botStats = botStats;
         this.perception = currentSnapshot();
@@ -97,8 +102,7 @@ final class BotController {
         this.pearlSideDirection = random.nextBoolean() ? 1 : -1;
         this.strafeDirection = random.nextBoolean() ? 1 : -1;
         this.strafeTicks = nextStrafeDuration();
-        this.healingPotions = this.consumablesAllowed && comboConsumables == null
-                ? settings.getHealingPotionCount() : 0;
+        this.lastReceivedMeleeHits = npc.getReceivedMeleeHits();
     }
 
     static int pearlCooldownTicks(String kitId, BotSettings settings) {
@@ -114,14 +118,18 @@ final class BotController {
     private void tickClient() {
         movementAdvanced = false;
         directCombatFacing = false;
+        bot.i(false);
         npc.applyPendingVelocity();
-        npc.ensureSpeedTwo();
+        if (nodebuffConsumables == null) npc.ensureSpeedTwo();
         perception = currentSnapshot();
         decrementTimers();
-        if (certificationMovement != null) {
+        BotCertificationMovement spacing = spacingMovement();
+        if (spacing != null) {
             // Expire combo spacing even while healing or switching to a pearl.
-            certificationMovement.advanceTick();
+            spacing.advanceTick();
+            if (npc.getReceivedMeleeHits() != lastReceivedMeleeHits) spacing.suspend();
         }
+        lastReceivedMeleeHits = npc.getReceivedMeleeHits();
         updateAirbornePearlWindow();
         updateStrafe();
         updateAimError();
@@ -146,6 +154,45 @@ final class BotController {
             }
         }
 
+        if (nodebuffConsumables != null) {
+            boolean healingNeeded = settings.isHealingEnabled()
+                    && getRemainingHealingPotions() > 0
+                    && perception.botHealth <= settings.getHealingHealth();
+            if (healingNeeded || healingTicks > 0) nodebuffConsumables.interruptUse();
+            if (healingTicks == 0 && settings.isHealingEnabled()
+                    && nodebuffConsumables.beginRefill()) {
+                stopBlocking();
+                pearlSwitchBackTicks = 0;
+                suspendCertificationMovement();
+                healingRetreatYaw = BotMovement.oppositeYaw(BotMovement.yawTo(
+                        perception.targetX - bot.locX, perception.targetZ - bot.locZ));
+                boolean facingAway = faceHealingRetreatDirection();
+                move(BotMovement.angleDifference(bot.yaw, healingRetreatYaw) <= 90.0D
+                        ? 1.0F : -0.62F, 0.0F);
+                // Feed native jump input; never replace received knockback/motY.
+                bot.i(facingAway && bot.onGround);
+                nodebuffConsumables.tickRefill();
+                rememberTargetPosition();
+                tickPhysics();
+                return;
+            }
+            boolean alreadyUsing = nodebuffConsumables.isUsing();
+            if (healingTicks == 0 && nodebuffConsumables.tickUse(healingNeeded)) {
+                suspendCertificationMovement();
+                blockHitTicks = 0;
+                pearlSwitchBackTicks = 0;
+                if (!alreadyUsing) {
+                    healingRetreatYaw = BotMovement.oppositeYaw(BotMovement.yawTo(
+                            perception.targetX - bot.locX, perception.targetZ - bot.locZ));
+                }
+                boolean facingAway = faceHealingRetreatDirection();
+                move(facingAway ? 1.0F : 0.0F, 0.0F);
+                rememberTargetPosition();
+                tickPhysics();
+                return;
+            }
+        }
+
         if (shouldBeginHealing()) {
             stopBlocking();
             emergencyHealing = shouldUseEmergencyHealing();
@@ -155,8 +202,8 @@ final class BotController {
                     perception.targetX - bot.locX, perception.targetZ - bot.locZ));
             healingRetreatTicks = 0;
             healingPotionThrown = false;
-            bot.inventory.itemInHandIndex = 2;
-            bot.inventory.setItem(2, healingPotion());
+            pearlSwitchBackTicks = 0;
+            bot.inventory.itemInHandIndex = nodebuffConsumables.healingSlot();
         }
 
         if (healingTicks > 0) {
@@ -224,11 +271,12 @@ final class BotController {
                 settings.getPreferredDistance(), settings.getRetreatDistance(), bot.noDamageTicks > 0);
         float strafe = BotMovement.strafeInput(settings.isStrafeEnabled(), targetFacingAway,
                 settings.getStrafeInput(), strafeDirection);
-        if (certificationMovement != null) {
-            forward = certificationMovement.forwardInput(distance, relativeHorizontalSpeed(distance),
+        BotCertificationMovement spacing = spacingMovement();
+        if (spacing != null) {
+            forward = spacing.forwardInput(distance, relativeHorizontalSpeed(distance),
                     targetFacingAway, bot.noDamageTicks > 0);
             strafe = settings.isStrafeEnabled()
-                    ? certificationMovement.strafeInput(settings.getStrafeInput(), strafeDirection,
+                    ? spacing.strafeInput(settings.getStrafeInput(), strafeDirection,
                             targetFacingAway, forward) : 0.0F;
         }
         float targetYaw = BotMovement.yawTo(perception.targetX - bot.locX,
@@ -278,19 +326,22 @@ final class BotController {
         beginBlockHit();
         if (npc.getLandedMeleeHits() > landedHitsBefore) {
             sprintState.scheduleReset(settings.getSprintResetTicks());
-            if (certificationMovement != null) {
-                certificationMovement.recordLandedHit();
+            if (spacing != null) {
+                spacing.recordLandedHit();
                 // Include this successful-hit tick in the straight combo window;
                 // native physics has not consumed the movement inputs yet.
-                bot.aZ = 0.0F;
+                if (spacing.isComboSpacing()) bot.aZ = 0.0F;
             }
         }
     }
 
     private void suspendCertificationMovement() {
-        if (certificationMovement != null) {
-            certificationMovement.suspend();
-        }
+        BotCertificationMovement spacing = spacingMovement();
+        if (spacing != null) spacing.suspend();
+    }
+
+    private BotCertificationMovement spacingMovement() {
+        return certificationMovement != null ? certificationMovement : practiceMovement;
     }
 
     private double relativeHorizontalSpeed(double distance) {
@@ -319,12 +370,12 @@ final class BotController {
                 horizontalDistance(), HEALING_SPLASH_SAFE_DISTANCE)) {
             bot.bw();
             int requestedPotions = BotHealingPlan.potionsForHealth(perception.botHealth,
-                    settings.getHealingDoublePotionHealthThreshold(), healingPotions);
+                    settings.getHealingDoublePotionHealthThreshold(),
+                    nodebuffConsumables == null ? 0 : nodebuffConsumables.countHotbarHealingPotions());
             int thrownPotions = throwHealingPotionsIntoRetreatPath(
                     requestedPotions, BotHealingPlan.shouldSplashImmediately(
                             emergencyHealing, bot.onGround));
             if (thrownPotions > 0) {
-                healingPotions -= thrownPotions;
                 healingPotionThrown = true;
                 snapFaceTarget();
                 move(0.0F, 0.0F);
@@ -393,8 +444,14 @@ final class BotController {
         double sideZ = backwardX;
         int thrown = 0;
         for (int index = 0; index < potionCount; index++) {
+            int slot = nodebuffConsumables.healingSlot();
+            if (slot < 0) break;
+            ItemStack heldPotion = bot.inventory.getItem(slot);
+            bot.inventory.itemInHandIndex = slot;
             double sideOffset = potionCount == 1 ? 0.0D : (index == 0 ? -0.06D : 0.06D);
-            BotHealingPotion potion = new BotHealingPotion(bot.world, bot, healingPotion());
+            ItemStack projectileItem = heldPotion.cloneItemStack();
+            projectileItem.count = 1;
+            BotHealingPotion potion = new BotHealingPotion(bot.world, bot, projectileItem);
             potion.setPosition(bot.locX + backwardX * HEAL_POTION_TRAIL_OFFSET
                             + sideX * sideOffset,
                     bot.locY + 0.45D,
@@ -407,6 +464,7 @@ final class BotController {
             potion.motZ = backwardZ * HEAL_POTION_BACKWARD_SPEED;
             if (bot.world.addEntity(potion)) {
                 thrown++;
+                nodebuffConsumables.consumeThrownHealingPotion(slot);
                 if (splashImmediately) {
                     potion.splashOn(bot);
                 }
@@ -416,7 +474,7 @@ final class BotController {
     }
 
     int getRemainingHealingPotions() {
-        return healingPotions;
+        return nodebuffConsumables == null ? 0 : nodebuffConsumables.countHealingPotions();
     }
 
     private void lookAt(double x, double y, double z, double addedYaw, double addedPitch) {
@@ -462,8 +520,8 @@ final class BotController {
 
     private boolean shouldBeginHealing() {
         boolean emergency = shouldUseEmergencyHealing();
-        return comboConsumables == null && consumablesAllowed
-                && settings.isHealingEnabled() && healingPotions > 0
+        return nodebuffConsumables != null && consumablesAllowed
+                && settings.isHealingEnabled() && nodebuffConsumables.healingSlot() >= 0
                 && (healCooldown == 0 || emergency)
                 && healingTicks == 0 && perception.botHealth <= settings.getHealingHealth()
                 && (bot.onGround || emergency);
@@ -599,7 +657,8 @@ final class BotController {
 
     private void beginBlockHit() {
         if (botStats == null
-                || botStats.getGuards() >= MatchParticipantStats.MAX_GUARDS_PER_MATCH) {
+                || botStats.getGuards() >= MatchParticipantStats.MAX_GUARDS_PER_MATCH
+                || bot.getHealth() <= 0.0F || targetHandle.getHealth() <= 0.0F) {
             return;
         }
         ItemStack sword = bot.inventory.getItemInHand();
@@ -618,7 +677,7 @@ final class BotController {
     }
 
     private boolean isUsingItem() {
-        return bot.isBlocking() || (comboConsumables != null && bot.bS());
+        return bot.isBlocking() || ((comboConsumables != null || nodebuffConsumables != null) && bot.bS());
     }
 
     private int nextStrafeDuration() {
@@ -650,10 +709,6 @@ final class BotController {
                 targetHandle.getHeadHeight(), targetHandle.yaw, targetHandle.onGround,
                 bot.getHealth(),
                 npc.getUnansweredMeleeHits());
-    }
-
-    private ItemStack healingPotion() {
-        return new ItemStack(Items.POTION, 1, SPLASH_HEALING_TWO_DATA);
     }
 
     private static final class CombatSnapshot {

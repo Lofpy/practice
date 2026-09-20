@@ -10,6 +10,8 @@ import com.poppy.practice.arena.ArenaManager;
 import com.poppy.practice.kit.Kit;
 import com.poppy.practice.kit.KitManager;
 import com.poppy.practice.kit.KitLayoutService;
+import com.poppy.practice.language.LanguageService;
+import com.poppy.practice.language.PlayerLanguage;
 import com.poppy.practice.match.MatchEndReason;
 import com.poppy.practice.match.BoxingRules;
 import com.poppy.practice.match.ComboRules;
@@ -60,6 +62,22 @@ public final class BotService {
     private ComboFallController comboFallController;
     private TierTestService tierTestService;
     private MatchFinishEffects finishEffects;
+    private LanguageService languages;
+
+    public void setLanguageService(LanguageService languages) { this.languages = languages; }
+
+    private PlayerLanguage language(Player player) {
+        return languages == null ? PlayerLanguage.JAPANESE : languages.language(player);
+    }
+
+    private void send(Player player, String japanese, String english) {
+        player.sendMessage(language(player).choose(japanese, english));
+    }
+    private java.util.function.Consumer<UUID> matchEndObserver = id -> { };
+
+    public void setMatchEndObserver(java.util.function.Consumer<UUID> observer) {
+        matchEndObserver = observer == null ? id -> { } : observer;
+    }
     private final Map<UUID, BotMatch> matchesByPlayer = new HashMap<UUID, BotMatch>();
     private final Map<UUID, BotMatch> matchesByBot = new HashMap<UUID, BotMatch>();
     private final Map<UUID, BotNpc> botsById = new HashMap<UUID, BotNpc>();
@@ -134,7 +152,8 @@ public final class BotService {
                 botKits.add(kit);
             }
         }
-        player.openInventory(new KitSelectionMenu(KitSelectionMenu.Purpose.BOT, botKits).getInventory());
+        player.openInventory(new KitSelectionMenu(KitSelectionMenu.Purpose.BOT, botKits,
+                null, player.getUniqueId(), language(player)).getInventory());
     }
 
     public void openSettings(Player player, String selectedKitId) {
@@ -143,7 +162,7 @@ public final class BotService {
         }
         Kit kit = selectedKit(player, selectedKitId);
         if (kit != null) {
-            BotSettingsMenu.open(player, plugin.getConfig(), kit);
+            BotSettingsMenu.open(player, plugin.getConfig(), kit, language(player));
         }
     }
 
@@ -152,7 +171,7 @@ public final class BotService {
         if (shuttingDown || (profile.getState() != PlayerState.LOBBY
                 && profile.getState() != PlayerState.QUEUE)
                 || matchesByPlayer.containsKey(player.getUniqueId())) {
-            player.sendMessage(ChatColor.RED + "You cannot open bot setup right now.");
+            send(player, ChatColor.RED + "現在Bot設定を開くことはできません。", ChatColor.RED + "You cannot open bot setup right now.");
             return false;
         }
         return true;
@@ -166,7 +185,8 @@ public final class BotService {
     private Kit selectedKit(Player player, String selectedKitId) {
         Kit kit = isSupportedKit(selectedKitId) ? kitManager.get(selectedKitId) : null;
         if (kit == null) {
-            player.sendMessage(ChatColor.RED + "Choose an available NoDebuff, Boxing or Combo kit first.");
+            send(player, ChatColor.RED + "NoDebuff・Boxing・Comboから利用可能なKitを選択してください。",
+                    ChatColor.RED + "Choose an available NoDebuff, Boxing or Combo kit first.");
         }
         return kit;
     }
@@ -227,7 +247,7 @@ public final class BotService {
     private boolean start(Player player, String selectedKitId, boolean placement) {
         BotSettings matchSettings = placement ? BotSettings.certificationPreset() : BotSettings.load(plugin);
         if (shuttingDown) {
-            player.sendMessage(ChatColor.RED + "Bot matches are currently unavailable.");
+            send(player, ChatColor.RED + "現在Bot戦は利用できません。", ChatColor.RED + "Bot matches are currently unavailable.");
             return false;
         }
         PlayerProfile profile = profileManager.getOrCreate(player.getUniqueId());
@@ -235,21 +255,21 @@ public final class BotService {
             queueManager.leave(player, false);
         }
         if (profile.getState() != PlayerState.LOBBY || matchesByPlayer.containsKey(player.getUniqueId())) {
-            player.sendMessage(ChatColor.RED + "You cannot start a bot match right now.");
+            send(player, ChatColor.RED + "現在Bot戦を開始することはできません。", ChatColor.RED + "You cannot start a bot match right now.");
             return false;
         }
         Kit kit = kitManager.get(selectedKitId == null ? matchSettings.getKitId() : selectedKitId);
         if (kit == null) {
-            player.sendMessage(ChatColor.RED + "The configured bot kit is unavailable.");
+            send(player, ChatColor.RED + "指定されたBotのKitは利用できません。", ChatColor.RED + "The configured bot kit is unavailable.");
             return false;
         }
         if (ComboRules.isCombo(kit.getId()) && comboCombatService == null) {
-            player.sendMessage(ChatColor.RED + "Combo combat settings are unavailable.");
+            send(player, ChatColor.RED + "Comboの戦闘設定を利用できません。", ChatColor.RED + "Combo combat settings are unavailable.");
             return false;
         }
         Arena arena = arenaManager.acquireAvailable(kit.getId());
         if (arena == null) {
-            player.sendMessage(ChatColor.YELLOW + "No arena is currently available for a bot match.");
+            send(player, ChatColor.RED + "現在Bot戦に利用できるアリーナがありません。", ChatColor.RED + "No arena is currently available for a bot match.");
             return false;
         }
 
@@ -282,17 +302,18 @@ public final class BotService {
             scoreboardService.showBotMatch(player, npc.getPlayer(), match);
             // Retain the player's profile until despawn. Chunk loading/retracking may
             // deliver a player spawn long after the initial ADD_PLAYER packet.
-            player.sendMessage(ChatColor.GRAY + "Bot match started against " + coloredBotName() + ChatColor.GRAY + ".");
+            send(player, ChatColor.GRAY + "Bot戦の対戦相手: " + coloredBotName(),
+                    ChatColor.GRAY + "Bot match started against " + coloredBotName() + ChatColor.GRAY + ".");
             if (placement) {
-                player.sendMessage(ChatColor.GOLD + "Certification: " + kit.getId()
-                        + " | fixed Hard-equivalent bot. Finish the match for your assessment.");
+                send(player, ChatColor.RED + "認定戦: " + kit.getId() + " | 固定設定のBotと対戦し、試合終了後に評価します。",
+                        ChatColor.RED + "Certification: " + kit.getId() + " | fixed bot settings. Finish the match for your assessment.");
             }
             if (match.isBoxing()) {
-                player.sendMessage(ChatColor.AQUA + "Boxing: First to " + BoxingRules.HITS_TO_WIN
-                        + " hits wins. No health damage, healing potions or pearls.");
+                send(player, ChatColor.GRAY + "Boxing: " + BoxingRules.HITS_TO_WIN + "ヒット先取。体力ダメージ・回復ポーション・パールはありません。",
+                        ChatColor.GRAY + "Boxing: First to " + BoxingRules.HITS_TO_WIN + " hits wins. No health damage, healing potions or pearls.");
             } else if (match.isCombo()) {
-                player.sendMessage(ChatColor.AQUA
-                        + "Combo: dedicated knockback and hit delay for both players. Ender pearls: 8s.");
+                send(player, ChatColor.GRAY + "Combo: 専用KB・無敵時間を使用。パールのクールダウンは8秒です。",
+                        ChatColor.GRAY + "Combo: dedicated knockback and hit delay for both players. Ender pearls: 8s.");
             }
             startCountdown(match);
             return true;
@@ -374,6 +395,7 @@ public final class BotService {
         }
         final BotController controller = new BotController(npc, player, matchSettings,
                 match.getStats(match.getBotEntityId()), match.getKitId());
+        match.setBotRemainingHealingPotions(controller.getRemainingHealingPotions());
 
         BukkitTask task = new BukkitRunnable() {
             @Override
@@ -421,6 +443,25 @@ public final class BotService {
     public Player getBot(BotMatch match) {
         BotNpc npc = match == null ? null : botsById.get(match.getBotEntityId());
         return npc == null ? null : npc.getPlayer();
+    }
+
+    /** Publish the NPC profile before the observer teleports into tracking range. */
+    public void addSpectator(BotMatch match, Player viewer) {
+        BotNpc npc = match == null ? null : botsById.get(match.getBotEntityId());
+        if (npc != null && getByPlayer(match.getPlayerId()) == match) {
+            npc.getPlayer().hidePlayer(viewer);
+            npc.showPlayerInfo(viewer);
+        }
+    }
+
+    public void removeSpectator(BotMatch match, Player viewer) {
+        BotNpc npc = match == null ? null : botsById.get(match.getBotEntityId());
+        if (npc == null || viewer == null) return;
+        npc.getPlayer().showPlayer(viewer);
+        if (!viewer.isOnline()) return;
+        ((org.bukkit.craftbukkit.v1_8_R3.entity.CraftPlayer) viewer).getHandle().playerConnection.sendPacket(
+                new net.minecraft.server.v1_8_R3.PacketPlayOutEntityDestroy(npc.getHandle().getId()));
+        npc.removePlayerInfo(viewer);
     }
 
     public boolean canBotHealOpponent(BotMatch match) {
@@ -542,6 +583,9 @@ public final class BotService {
         if (profile != null) {
             profile.setState(PlayerState.ENDING);
         }
+        cleanup.run("stop bot item use", () -> {
+            if (npc != null && npc.getHandle().bS()) npc.getHandle().bV();
+        });
         cleanup.run("capture and display result", () -> {
             MatchResult result = completed
                     ? captureResult(match, player, bot, resultPlayerWon, matchSettings,
@@ -556,7 +600,7 @@ public final class BotService {
                     resultService.sendResultChat(player, result);
                 }
             } else if (resultReason == MatchEndReason.FORCE_STOP && player != null && player.isOnline()) {
-                player.sendMessage(ChatColor.YELLOW + "Bot match stopped.");
+                send(player, ChatColor.RED + "Bot戦を終了しました。", ChatColor.RED + "Bot match stopped.");
             }
         });
         if (match.getState() != MatchState.ENDING || getByPlayer(match.getPlayerId()) != match) {
@@ -588,6 +632,7 @@ public final class BotService {
             return;
         }
         CleanupTasks cleanup = new CleanupTasks(plugin.getLogger(), "Bot match cleanup " + match.getId());
+        cleanup.run("return spectators", () -> matchEndObserver.accept(match.getId()));
         cleanup.run("cancel finish task", () -> cancelTask(match.getFinishTaskId()));
         match.setFinishTaskId(null);
         Player player = Bukkit.getPlayer(match.getPlayerId());

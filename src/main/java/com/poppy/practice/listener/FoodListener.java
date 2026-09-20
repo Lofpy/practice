@@ -51,8 +51,8 @@ public final class FoodListener implements Listener {
     }
 
     static boolean shouldKeepFullHunger(PlayerProfile profile, Match match, BotMatch botMatch) {
-        if (botMatch != null && botMatch.isCombo() && botMatch.getState() == MatchState.FIGHTING) {
-            // NPCs have no PlayerProfile; Combo food must still use native hunger/saturation.
+        if (botMatch != null && !botMatch.isBoxing() && botMatch.getState() == MatchState.FIGHTING) {
+            // NPCs have no PlayerProfile; NoDebuff and Combo both use native hunger.
             return false;
         }
         return profile == null || profile.getState() != PlayerState.FIGHTING

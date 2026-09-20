@@ -10,8 +10,8 @@ import org.bukkit.scoreboard.Team;
 
 /** One reusable sidebar; line values and visibility change only when necessary. */
 final class PracticeSidebar {
-    private static final String TITLE = ChatColor.AQUA.toString()
-            + ChatColor.BOLD + "Poppy Practice";
+    private static final String TITLE = ChatColor.RED.toString()
+            + ChatColor.BOLD + "AscendingMC Practice";
     private final Scoreboard scoreboard;
     private final Objective objective;
     private final Line selfPing;
@@ -119,7 +119,7 @@ final class PracticeSidebar {
     static String ratingText(long ratingMilli) {
         // Legacy clients cap each team suffix at 16 characters; storage retains the full number.
         String number = ratingMilli > 999999999999L ? ">999999999.999" : RatingService.format(ratingMilli);
-        return ChatColor.AQUA + number;
+        return ChatColor.RED + number;
     }
 
     static String placementText(int completed) {

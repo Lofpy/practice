@@ -30,6 +30,8 @@ public final class PlayerInteractListener implements Listener {
     private com.poppy.practice.cosmetic.CosmeticSettingsMenu settingsMenu;
     private com.poppy.practice.tier.TierMenu tierMenu;
     private com.poppy.practice.rating.RatingService ratings;
+    private com.poppy.practice.language.LanguageService languages;
+    public void setLanguageService(com.poppy.practice.language.LanguageService languages) { this.languages = languages; }
 
     public void setRatingService(com.poppy.practice.rating.RatingService ratings) { this.ratings = ratings; }
 
@@ -89,7 +91,8 @@ public final class PlayerInteractListener implements Listener {
                 break;
             case QUEUE:
                 player.openInventory(new KitSelectionMenu(KitSelectionMenu.Purpose.QUEUE,
-                        kitManager.all(), ratings, player.getUniqueId()).getInventory());
+                        kitManager.all(), ratings, player.getUniqueId(), languages == null
+                        ? com.poppy.practice.language.PlayerLanguage.JAPANESE : languages.language(player)).getInventory());
                 break;
             case EDIT_KIT:
                 kitLayoutService.openSelector(player);

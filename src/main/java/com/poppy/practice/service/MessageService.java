@@ -17,4 +17,8 @@ public final class MessageService {
     public void send(Player player, String key, String placeholder, String value) {
         messages.send(player, key, placeholder, value);
     }
+
+    public void sendLocalized(Player player, String japanese, String english) {
+        messages.sendLocalized(player, japanese, english);
+    }
 }

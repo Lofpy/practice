@@ -13,6 +13,11 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 
 public final class PlayerMoveListener implements Listener {
     private final ProfileManager profileManager;
+    private com.poppy.practice.language.LanguageService languages;
+
+    public void setLanguageService(com.poppy.practice.language.LanguageService languages) {
+        this.languages = languages;
+    }
 
     public PlayerMoveListener(ProfileManager profileManager) {
         this.profileManager = profileManager;
@@ -24,8 +29,7 @@ public final class PlayerMoveListener implements Listener {
             return;
         }
         PlayerProfile profile = profileManager.get(event.getPlayer().getUniqueId());
-        if (profile == null || (profile.getState() != PlayerState.STARTING
-                && profile.getState() != PlayerState.ENDING)) {
+        if (profile == null || profile.getState() != PlayerState.STARTING) {
             return;
         }
         Location from = event.getFrom();
@@ -49,7 +53,9 @@ public final class PlayerMoveListener implements Listener {
             return;
         }
         event.setCancelled(true);
-        event.getPlayer().sendMessage(ChatColor.RED + "Commands are disabled during the countdown.");
+        String japanese = "カウントダウン中はコマンドを使用できません。";
+        event.getPlayer().sendMessage(ChatColor.RED + (languages == null ? japanese : languages.text(
+                event.getPlayer(), japanese, "Commands are disabled during the countdown.")));
     }
 
     static boolean isAllowedDuringCountdown(String command) {

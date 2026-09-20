@@ -1,10 +1,14 @@
 name: PoppyPractice
 main: com.poppy.practice.PracticePlugin
 version: 0.1.0
-description: NoDebuff 1v1 practice server
+description: AscendingMC Practice server
 author: poppy
 softdepend: [ProtocolSupport, ViaVersion]
 commands:
+  spec:
+    description: Spectate a player's match or leave spectating
+    usage: /spec <player|leave>
+    aliases: [spectate]
   tierreset:
     description: Back up and reset selected certification results and ELO (administrator only)
     usage: /tierreset <player|UUID|all> [nodebuff|boxing|combo|all]
@@ -20,7 +24,7 @@ commands:
     description: Invite another player to a match without ELO changes
     usage: /duel <player> [kit] or /duel <accept|deny> <player>
   settings:
-    description: Choose your match kill effect in the PvP lobby
+    description: Choose your language and kill effect in the Practice lobby
     usage: /settings
   practice:
     description: Practice administrator command
@@ -57,6 +61,9 @@ commands:
     usage: /combokb [view [all|property]|set <property> <value>]
     permission: practice.admin
 permissions:
+  poppypractice.spec:
+    description: Allows spectating Practice matches
+    default: true
   practice.admin:
     description: Allows administration of PoppyPractice
     default: op

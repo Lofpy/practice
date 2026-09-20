@@ -15,8 +15,10 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 
 public final class PlayerDeathListener implements Listener {
+    static final long DEATH_ANIMATION_TICKS = 20L;
     private final java.util.Map<java.util.UUID, Location> deathLocations =
             new java.util.HashMap<java.util.UUID, Location>();
     private final PracticePlugin plugin;
@@ -41,7 +43,10 @@ public final class PlayerDeathListener implements Listener {
     public void onDeath(PlayerDeathEvent event) {
         event.setDeathMessage(null);
         event.setKeepInventory(true);
+        event.setDroppedExp(0);
         event.getDrops().clear();
+        // Fake players have no login/respawn lifecycle. BotService removes them.
+        if (botService.isBotEntity(event.getEntity())) return;
         deathLocations.put(event.getEntity().getUniqueId(), event.getEntity().getLocation().clone());
         if (matchManager.getByPlayer(event.getEntity().getUniqueId()) != null) {
             matchService.handleDeath(event.getEntity());
@@ -49,9 +54,17 @@ public final class PlayerDeathListener implements Listener {
             botService.handlePlayerDefeat(event.getEntity().getUniqueId());
         }
         Player player = event.getEntity();
-        Bukkit.getScheduler().runTask(plugin, () -> {
+        // Allow native zero-health metadata and the falling animation to reach observers.
+        // The result presentation still lasts three seconds; movement is unrestricted
+        // after respawn for the remainder of that presentation.
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (player.isOnline() && player.isDead()) player.spigot().respawn();
-        });
+        }, DEATH_ANIMATION_TICKS);
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        deathLocations.remove(event.getPlayer().getUniqueId());
     }
 
     @EventHandler

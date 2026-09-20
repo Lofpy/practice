@@ -23,7 +23,7 @@ public class RankedKitSelectionMenuTest {
         String[] lore = KitSelectionMenu.loreFor(KitSelectionMenu.Purpose.QUEUE,
                 new NoDebuffKit(), ratings, player);
         String text = Arrays.toString(lore);
-        assertTrue(text.contains("Your ELO: &b1650.000"));
+        assertTrue(text.contains("Your ELO: &c1650.000"));
         assertTrue(text.contains("100.000 or less"));
         assertEquals("&eLeft Click: &fJoin Ranked Queue", lore[lore.length - 1]);
         assertFalse(text.contains("Locked"));

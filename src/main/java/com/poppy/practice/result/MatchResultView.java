@@ -2,6 +2,8 @@ package com.poppy.practice.result;
 
 import com.poppy.practice.ui.MenuHolder;
 import com.poppy.practice.util.ItemBuilder;
+import com.poppy.practice.language.LanguageService;
+import com.poppy.practice.language.PlayerLanguage;
 import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.ComponentBuilder;
 import net.md_5.bungee.api.chat.HoverEvent;
@@ -23,24 +25,32 @@ import java.util.UUID;
 public final class MatchResultView {
     public static final String OVERVIEW_TITLE = "試合結果";
     public static final String INVENTORY_TITLE_PREFIX = "Inventory: ";
+    private LanguageService languages;
+
+    public void setLanguageService(LanguageService languages) { this.languages = languages; }
+    private PlayerLanguage language(UUID playerId) {
+        return languages == null ? PlayerLanguage.JAPANESE : languages.language(playerId);
+    }
 
     public void sendChat(Player viewer, MatchResult result) {
+        PlayerLanguage language = language(viewer.getUniqueId());
         MatchParticipantSnapshot winner = result.getParticipant(result.getWinnerId());
         MatchParticipantSnapshot loser = result.getOpponent(result.getWinnerId());
         if (winner == null || loser == null) {
             return;
         }
         viewer.sendMessage(ChatColor.DARK_GRAY + "-----------------------------");
-        sendParticipantLine(viewer, ChatColor.GREEN + "Winner: ", winner);
-        sendParticipantLine(viewer, ChatColor.RED + "Loser: ", loser);
-        viewer.sendMessage(ChatColor.GRAY + "Duration: " + ChatColor.WHITE
+        sendParticipantLine(viewer, ChatColor.GREEN + language.choose("勝者: ", "Winner: "), winner, language);
+        sendParticipantLine(viewer, ChatColor.RED + language.choose("敗者: ", "Loser: "), loser, language);
+        viewer.sendMessage(ChatColor.GRAY + language.choose("試合時間: ", "Duration: ") + ChatColor.WHITE
                 + duration(result.getDurationSeconds()));
-        viewer.sendMessage(ChatColor.YELLOW + "名前をクリックするとインベントリと戦績を確認できます。");
+        viewer.sendMessage(ChatColor.RED + language.choose("名前をクリックするとインベントリと戦績を確認できます。",
+                "Click a name to view the inventory and statistics."));
         viewer.sendMessage(ChatColor.DARK_GRAY + "-----------------------------");
     }
 
     private static void sendParticipantLine(Player viewer, String label,
-                                            MatchParticipantSnapshot participant) {
+                                            MatchParticipantSnapshot participant, PlayerLanguage language) {
         TextComponent line = new TextComponent(label);
         TextComponent name = new TextComponent(ChatColor.WHITE.toString()
                 + ChatColor.UNDERLINE + participant.getPlayerName());
@@ -48,32 +58,34 @@ public final class MatchResultView {
                 "/matchresult " + participant.getPlayerId()));
         name.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                 new ComponentBuilder(ChatColor.YELLOW
-                        + "クリックしてインベントリと戦績を表示").create()));
+                        + language.choose("クリックしてインベントリと戦績を表示", "Click to view inventory and statistics")).create()));
         line.addExtra(name);
         viewer.spigot().sendMessage(line);
     }
 
     public Inventory overview(UUID viewerId, MatchResult result) {
-        Holder holder = new Holder(27, OVERVIEW_TITLE,
+        PlayerLanguage language = language(viewerId);
+        Holder holder = new Holder(27, language.choose(OVERVIEW_TITLE, "Match Results"),
                 new MatchResultSelection(viewerId, result, null));
         Inventory inventory = holder.getInventory();
         fillRow(inventory, 0);
         fillRow(inventory, 18);
-        inventory.setItem(11, participantItem(result.getFirst(), result, true));
+        inventory.setItem(11, participantItem(result.getFirst(), result, true, language));
         inventory.setItem(13, new ItemBuilder(Material.WATCH)
-                .name("&b試合情報")
-                .lore("&7Duration: &f" + duration(result.getDurationSeconds()), "",
-                        "&7プレイヤーの頭をクリックすると",
-                        "&7終了時の持ち物と戦績を確認できます。")
+                .name(language.choose("&c試合情報", "&cMatch Information"))
+                .lore(language.choose("&7試合時間: &f", "&7Duration: &f") + duration(result.getDurationSeconds()), "",
+                        language.choose("&7プレイヤーの頭をクリックすると", "&7Click a player's head to view"),
+                        language.choose("&7終了時の持ち物と戦績を確認できます。", "&7their final inventory and statistics."))
                 .build());
-        inventory.setItem(15, participantItem(result.getSecond(), result, true));
+        inventory.setItem(15, participantItem(result.getSecond(), result, true, language));
         return inventory;
     }
 
     public Inventory participant(UUID viewerId, MatchResult result,
                                  MatchParticipantSnapshot participant) {
+        PlayerLanguage language = language(viewerId);
         Holder holder = new Holder(54,
-                INVENTORY_TITLE_PREFIX + shortName(participant.getPlayerName()),
+                language.choose("インベントリ: ", INVENTORY_TITLE_PREFIX) + shortName(participant.getPlayerName()),
                 new MatchResultSelection(viewerId, result, participant.getPlayerId()));
         Inventory inventory = holder.getInventory();
         ItemStack[] contents = participant.getContents();
@@ -84,17 +96,17 @@ public final class MatchResultView {
         for (int slot = 0; slot < armor.length; slot++) {
             inventory.setItem(36 + slot, armor[armor.length - 1 - slot]);
         }
-        inventory.setItem(40, statusStatisticsItem(participant));
+        inventory.setItem(40, statusStatisticsItem(participant, language));
         inventory.setItem(41, filler());
-        inventory.setItem(42, combatStatisticsItem(participant));
+        inventory.setItem(42, combatStatisticsItem(participant, language));
         inventory.setItem(43, filler());
-        inventory.setItem(44, potionStatisticsItem(participant));
+        inventory.setItem(44, potionStatisticsItem(participant, language));
         fillRow(inventory, 45);
-        inventory.setItem(49, participantItem(participant, result, false));
+        inventory.setItem(49, participantItem(participant, result, false, language));
         MatchParticipantSnapshot other = result.getOpponent(participant.getPlayerId());
         if (other != null) {
-            inventory.setItem(45, navigationItem("&e← " + other.getPlayerName()));
-            inventory.setItem(53, navigationItem("&e" + other.getPlayerName() + " →"));
+            inventory.setItem(45, navigationItem("&c← " + other.getPlayerName(), language));
+            inventory.setItem(53, navigationItem("&c" + other.getPlayerName() + " →", language));
         }
         return inventory;
     }
@@ -128,7 +140,7 @@ public final class MatchResultView {
     }
 
     private static ItemStack participantItem(MatchParticipantSnapshot participant,
-                                             MatchResult result, boolean clickable) {
+                                             MatchResult result, boolean clickable, PlayerLanguage language) {
         ItemStack head = new ItemStack(Material.SKULL_ITEM, 1, (short) 3);
         SkullMeta meta = (SkullMeta) head.getItemMeta();
         boolean winner = participant.getPlayerId().equals(result.getWinnerId());
@@ -138,66 +150,66 @@ public final class MatchResultView {
             meta.setOwner(participant.getPlayerName());
         }
         List<String> lore = new ArrayList<String>();
-        lore.add(ChatColor.GRAY + "Result: " + (winner ? ChatColor.GREEN + "Winner"
-                : ChatColor.RED + "Loser"));
-        lore.add(ChatColor.GRAY + "Duration: " + ChatColor.WHITE
+        lore.add(ChatColor.GRAY + language.choose("結果: ", "Result: ") + (winner ? ChatColor.GREEN + language.choose("勝利", "Winner")
+                : ChatColor.RED + language.choose("敗北", "Loser")));
+        lore.add(ChatColor.GRAY + language.choose("試合時間: ", "Duration: ") + ChatColor.WHITE
                 + duration(result.getDurationSeconds()));
         if (clickable) {
             lore.add("");
-            lore.add(ChatColor.YELLOW + "クリックでインベントリと戦績を表示");
+            lore.add(ChatColor.RED + language.choose("クリックでインベントリと戦績を表示", "Click to view inventory and statistics"));
         }
         meta.setLore(lore);
         head.setItemMeta(meta);
         return head;
     }
 
-    private static ItemStack statusStatisticsItem(MatchParticipantSnapshot participant) {
+    private static ItemStack statusStatisticsItem(MatchParticipantSnapshot participant, PlayerLanguage language) {
         return new ItemBuilder(Material.COOKED_BEEF)
-                .name("&6Status")
-                .lore("&7Remaining Health: &f" + format(participant.getHealth()) + " HP",
-                        "&7Hunger: &f" + participant.getFoodLevel() + "/20")
+                .name(language.choose("&c状態", "&cStatus"))
+                .lore(language.choose("&7残り体力: &f", "&7Remaining Health: &f") + format(participant.getHealth()) + " HP",
+                        language.choose("&7満腹度: &f", "&7Hunger: &f") + participant.getFoodLevel() + "/20")
                 .build();
     }
 
-    private static ItemStack combatStatisticsItem(MatchParticipantSnapshot participant) {
+    private static ItemStack combatStatisticsItem(MatchParticipantSnapshot participant, PlayerLanguage language) {
         return new ItemBuilder(Material.DIAMOND_SWORD)
-                .name("&bCombat Statistics")
-                .lore("&7Hits: &f" + participant.getHits(),
-                        "&7Criticals: &f" + participant.getCriticals(),
-                        "&7Guards: &f" + participant.getGuards())
+                .name(language.choose("&c戦闘統計", "&cCombat Statistics"))
+                .lore(language.choose("&7ヒット数: &f", "&7Hits: &f") + participant.getHits(),
+                        language.choose("&7クリティカル: &f", "&7Criticals: &f") + participant.getCriticals(),
+                        language.choose("&7ガード: &f", "&7Guards: &f") + participant.getGuards())
                 .build();
     }
 
-    private static ItemStack potionStatisticsItem(MatchParticipantSnapshot participant) {
+    private static ItemStack potionStatisticsItem(MatchParticipantSnapshot participant, PlayerLanguage language) {
         int remaining = participant.getRemainingHealingPotions();
         ItemStack item = remaining > 0
                 ? new ItemStack(Material.POTION, Math.min(64, remaining), (short) 16421)
                 : new ItemStack(Material.GLASS_BOTTLE);
         ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(ChatColor.LIGHT_PURPLE + "Potion Statistics");
+        meta.setDisplayName(ChatColor.RED + language.choose("ポーション統計", "Potion Statistics"));
         List<String> lore = new ArrayList<String>();
-        lore.add(ChatColor.GRAY + "Remaining Potions: " + ChatColor.WHITE + remaining);
-        lore.add(ChatColor.GRAY + "Health Healed: " + ChatColor.WHITE
+        lore.add(ChatColor.GRAY + language.choose("残りポーション: ", "Remaining Potions: ") + ChatColor.WHITE + remaining);
+        lore.add(ChatColor.GRAY + language.choose("回復した体力: ", "Health Healed: ") + ChatColor.WHITE
                 + format(participant.getHealedHealth()) + " HP");
-        lore.add(ChatColor.GRAY + "Potion Accuracy: " + ChatColor.WHITE
+        lore.add(ChatColor.GRAY + language.choose("ポーション精度: ", "Potion Accuracy: ") + ChatColor.WHITE
                 + format(participant.getPotionAccuracyPercent()) + "%");
-        lore.add(ChatColor.GRAY + "Missed Potions: " + ChatColor.WHITE
+        lore.add(ChatColor.GRAY + language.choose("外したポーション: ", "Missed Potions: ") + ChatColor.WHITE
                 + participant.getHealingPotionsMissed());
-        lore.add(ChatColor.GRAY + "Overheal: " + ChatColor.WHITE
+        lore.add(ChatColor.GRAY + language.choose("過剰回復: ", "Overheal: ") + ChatColor.WHITE
                 + format(participant.getOverhealedHealth()) + " HP");
-        lore.add(ChatColor.GRAY + "Opponent Health Healed: " + ChatColor.WHITE
+        lore.add(ChatColor.GRAY + language.choose("相手を回復した体力: ", "Opponent Health Healed: ") + ChatColor.WHITE
                 + format(participant.getOpponentHealedHealth()) + " HP");
         if (remaining == 0) {
-            lore.add(ChatColor.GRAY + "No healing potions remaining.");
+            lore.add(ChatColor.GRAY + language.choose("回復ポーションは残っていません。", "No healing potions remaining."));
         }
         meta.setLore(lore);
         item.setItemMeta(meta);
         return item;
     }
 
-    private static ItemStack navigationItem(String name) {
+    private static ItemStack navigationItem(String name, PlayerLanguage language) {
         return new ItemBuilder(Material.ARROW).name(name)
-                .lore("&7クリックして相手のインベントリを表示します。")
+                .lore(language.choose("&7クリックして相手のインベントリを表示します。", "&7Click to view the opponent's inventory."))
                 .build();
     }
 

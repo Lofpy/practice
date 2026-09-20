@@ -25,6 +25,16 @@ public final class MatchResultService implements Listener, CommandExecutor {
     private final ProfileManager profileManager;
     private final MatchResultView view = new MatchResultView();
     private final Map<UUID, MatchResult> latestByViewer = new HashMap<UUID, MatchResult>();
+    private com.poppy.practice.language.LanguageService languages;
+
+    public void setLanguageService(com.poppy.practice.language.LanguageService languages) {
+        this.languages = languages;
+        view.setLanguageService(languages);
+    }
+
+    private void message(Player player, String japanese, String english) {
+        player.sendMessage(ChatColor.RED + (languages == null ? japanese : languages.text(player, japanese, english)));
+    }
 
     public MatchResultService(ProfileManager profileManager) {
         this.profileManager = profileManager;
@@ -55,7 +65,7 @@ public final class MatchResultService implements Listener, CommandExecutor {
         MatchParticipantSnapshot participant = result == null
                 ? null : result.getParticipant(participantId);
         if (participant == null) {
-            viewer.sendMessage(ChatColor.RED + "表示できる試合結果がありません。");
+            message(viewer, "表示できる試合結果がありません。", "No match result is available.");
             return false;
         }
         viewer.openInventory(view.participant(viewer.getUniqueId(), result, participant));
@@ -68,7 +78,7 @@ public final class MatchResultService implements Listener, CommandExecutor {
         }
         MatchResult result = latestByViewer.get(viewer.getUniqueId());
         if (result == null) {
-            viewer.sendMessage(ChatColor.RED + "表示できる直近の試合結果がありません。");
+            message(viewer, "表示できる直近の試合結果がありません。", "No recent match result is available.");
             return false;
         }
         viewer.openInventory(view.overview(viewer.getUniqueId(), result));
@@ -102,12 +112,12 @@ public final class MatchResultService implements Listener, CommandExecutor {
             return true;
         }
         if (args.length != 1) {
-            viewer.sendMessage(ChatColor.RED + "Usage: /matchresult [player]");
+            message(viewer, "使い方: /matchresult [プレイヤー]", "Usage: /matchresult [player]");
             return true;
         }
         UUID participantId = participantId(latestByViewer.get(viewer.getUniqueId()), args[0]);
         if (participantId == null) {
-            viewer.sendMessage(ChatColor.RED + "表示できる試合結果がありません。");
+            message(viewer, "表示できる試合結果がありません。", "No match result is available.");
         } else {
             openParticipant(viewer, participantId);
         }
@@ -135,7 +145,7 @@ public final class MatchResultService implements Listener, CommandExecutor {
         PlayerProfile profile = profileManager.get(player.getUniqueId());
         if (profile != null && (profile.getState() == PlayerState.STARTING
                 || profile.getState() == PlayerState.FIGHTING)) {
-            player.sendMessage(ChatColor.RED + "試合中は過去の試合結果を表示できません。");
+            message(player, "試合中は過去の試合結果を表示できません。", "You cannot view previous results during a match.");
             return false;
         }
         return true;

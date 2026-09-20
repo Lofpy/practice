@@ -32,6 +32,7 @@ final class BotNpc {
     private final BotNetworkManager networkManager;
     private int unansweredMeleeHits;
     private long landedMeleeHits;
+    private long receivedMeleeHits;
     private boolean spawned;
     private DoubleUnaryOperator verticalVelocityController;
 
@@ -77,7 +78,12 @@ final class BotNpc {
         npc.player.setFoodLevel(20);
         npc.player.setSaturation(20.0F);
         kit.apply(npc.player);
-        npc.ensureSpeedTwo();
+        if ("nodebuff".equalsIgnoreCase(kit.getId())) {
+            // NoDebuff must drink the real kit potions, not inherit an infinite buff.
+            npc.player.removePotionEffect(PotionEffectType.SPEED);
+        } else {
+            npc.ensureSpeedTwo();
+        }
         entity.inventory.itemInHandIndex = 0;
 
         npc.sendPlayerInfo(viewer, PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER);
@@ -146,6 +152,7 @@ final class BotNpc {
 
     void recordMeleeHit() {
         unansweredMeleeHits++;
+        receivedMeleeHits++;
     }
 
     void recordMeleeHitLanded() {
@@ -155,6 +162,10 @@ final class BotNpc {
 
     long getLandedMeleeHits() {
         return landedMeleeHits;
+    }
+
+    long getReceivedMeleeHits() {
+        return receivedMeleeHits;
     }
 
     int getUnansweredMeleeHits() {

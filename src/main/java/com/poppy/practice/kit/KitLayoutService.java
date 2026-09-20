@@ -1,6 +1,8 @@
 package com.poppy.practice.kit;
 
 import com.poppy.practice.PracticePlugin;
+import com.poppy.practice.language.LanguageService;
+import com.poppy.practice.language.PlayerLanguage;
 import com.poppy.practice.ui.KitSelectionMenu;
 import com.poppy.practice.ui.MenuHolder;
 import com.poppy.practice.ui.MenuNavigation;
@@ -28,6 +30,12 @@ public final class KitLayoutService {
     private final File storageFile;
     private final YamlConfiguration storage;
     private final Map<UUID, EditorSession> editors = new HashMap<UUID, EditorSession>();
+    private LanguageService languages;
+
+    public void setLanguageService(LanguageService languages) { this.languages = languages; }
+    private PlayerLanguage language(Player player) {
+        return languages == null ? PlayerLanguage.JAPANESE : languages.language(player);
+    }
 
     public KitLayoutService(PracticePlugin plugin, KitManager kitManager) {
         this.plugin = plugin;
@@ -38,20 +46,21 @@ public final class KitLayoutService {
 
     public void openSelector(Player player) {
         player.openInventory(new KitSelectionMenu(KitSelectionMenu.Purpose.EDIT,
-                kitManager.all()).getInventory());
+                kitManager.all(), null, player.getUniqueId(), language(player)).getInventory());
     }
 
     public void openEditor(Player player, Kit kit) {
         // Finish any previous editor before replacing its session.
         player.closeInventory();
         ItemStack[] layout = layoutFor(player.getUniqueId(), kit);
-        Inventory inventory = new EditorMenu(kit.getDisplayName()).getInventory();
+        Inventory inventory = new EditorMenu(kit.getDisplayName(), language(player)).getInventory();
         inventory.setContents(toEditorContents(layout));
         editors.put(player.getUniqueId(), new EditorSession(kit.getId(), inventory));
         player.openInventory(inventory);
-        player.sendMessage(ChatColor.AQUA + "Kit Editor: " + ChatColor.GRAY
-                + "Left-click to pick up or swap whole stacks. The bottom row is your hotbar.");
-        player.sendMessage(ChatColor.GRAY + "Close the inventory to save. Item amounts cannot change.");
+        player.sendMessage(ChatColor.RED + language(player).choose("キット編集: ", "Kit Editor: ") + ChatColor.GRAY
+                + language(player).choose("左クリックでスタックを持つ・入れ替える。最下段はホットバーです。",
+                "Left-click to pick up or swap whole stacks. The bottom row is your hotbar."));
+        player.sendMessage(ChatColor.GRAY + language(player).choose("閉じると保存されます。アイテムの個数は変更できません。", "Close the inventory to save. Item amounts cannot change."));
     }
 
     public void swapEditorSlot(Player player, Inventory inventory, int rawSlot) {
@@ -88,14 +97,14 @@ public final class KitLayoutService {
         boolean cursorReturned = returnCursorToEditor(player, inventory);
         Kit kit = kitManager.get(session.kitId);
         if (kit == null) {
-            player.sendMessage(ChatColor.RED + "That kit is no longer available.");
+            player.sendMessage(ChatColor.RED + language(player).choose("そのキットは現在使用できません。", "That kit is no longer available."));
             return true;
         }
         int[] permutation = createPermutation(kit.createInventoryContents(),
                 fromEditorContents(inventory.getContents()));
         if (!cursorReturned || permutation == null) {
             player.sendMessage(ChatColor.RED
-                    + "Layout not saved: only item positions may be changed.");
+                    + language(player).choose("保存できません: アイテムの配置のみ変更できます。", "Layout not saved: only item positions may be changed."));
             return true;
         }
         String storagePath = path(player.getUniqueId(), kit.getId());
@@ -103,11 +112,11 @@ public final class KitLayoutService {
         storage.set(storagePath, asList(permutation));
         try {
             storage.save(storageFile);
-            player.sendMessage(ChatColor.GREEN + kit.getDisplayName() + " layout saved.");
+            player.sendMessage(ChatColor.RED + kit.getDisplayName() + language(player).choose(" の配置を保存しました。", " layout saved."));
         } catch (IOException exception) {
             storage.set(storagePath, previous);
             plugin.getLogger().severe("Could not save kit layouts: " + exception.getMessage());
-            player.sendMessage(ChatColor.RED + "Could not save your kit layout.");
+            player.sendMessage(ChatColor.RED + language(player).choose("キット配置を保存できませんでした。", "Could not save your kit layout."));
         }
         return true;
     }
@@ -309,8 +318,8 @@ public final class KitLayoutService {
     }
 
     private static final class EditorMenu extends MenuHolder {
-        private EditorMenu(String kitName) {
-            super(STORAGE_SIZE, editorTitle(kitName));
+        private EditorMenu(String kitName, PlayerLanguage language) {
+            super(STORAGE_SIZE, language.choose("キット編集: " + kitName, editorTitle(kitName)));
         }
     }
 }

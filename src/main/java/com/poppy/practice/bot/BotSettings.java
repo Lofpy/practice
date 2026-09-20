@@ -97,7 +97,7 @@ public final class BotSettings {
         healingEmergencyRetreatBeforeThrowTicks = clamp(
                 root.getInt("healing.emergency-retreat-before-throw-ticks", 0),
                 0, healingRetreatBeforeThrowTicks);
-        healingCanHealOpponent = root.getBoolean("healing.can-heal-opponent", false);
+        healingCanHealOpponent = root.getBoolean("healing.can-heal-opponent", true);
     }
 
     public static BotSettings load(JavaPlugin plugin) {

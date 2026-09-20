@@ -86,7 +86,8 @@ public class RankedQueueTest {
     @Test public void unqualifiedPlayerCannotJoinAndReceivesCurrentKitCounter() {
         ProfileManager profiles = new ProfileManager();
         RatingService rating = new RatingService(temporary.getRoot(), Logger.getAnonymousLogger());
-        QueueManager queue = new QueueManager(profiles, new KitManager(), null, null, null);
+        QueueManager queue = new QueueManager(profiles, new KitManager(), null,
+                new MessageService(new MessageConfig(null)), null);
         queue.setRatingService(rating);
         Player player = player(UUID.randomUUID());
         profiles.getOrCreate(player.getUniqueId()).setSelectedKitId("nodebuff");
@@ -101,7 +102,8 @@ public class RankedQueueTest {
     @Test public void opDoesNotBypassCertificationAndAnotherKitCannotUnlockSelectedQueue() {
         ProfileManager profiles = new ProfileManager();
         RatingService rating = new RatingService(temporary.getRoot(), Logger.getAnonymousLogger());
-        QueueManager queue = new QueueManager(profiles, new KitManager(), null, null, null);
+        QueueManager queue = new QueueManager(profiles, new KitManager(), null,
+                new MessageService(new MessageConfig(null)), null);
         queue.setRatingService(rating);
         Player player = player(UUID.randomUUID());
         when(player.isOp()).thenReturn(true);
@@ -190,7 +192,7 @@ public class RankedQueueTest {
             assertEquals(3, queue.size("nodebuff"));
             for (UUID id : order) {
                 assertEquals(PlayerState.QUEUE, profiles.get(id).getState());
-                verify(online.get(id)).sendMessage(contains("no-arena"));
+                verify(online.get(id)).sendMessage(contains("使用できるアリーナがありません"));
             }
         } finally {
             serverField.set(null, previous);

@@ -2,6 +2,7 @@ package com.poppy.practice.cosmetic;
 
 import com.poppy.practice.player.PlayerState;
 import com.poppy.practice.player.ProfileManager;
+import com.poppy.practice.language.PlayerLanguage;
 import org.bukkit.Material;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
@@ -29,6 +30,24 @@ import static org.mockito.Mockito.*;
 
 public class CosmeticSettingsMenuTest {
     @Rule public TemporaryFolder temporary = new TemporaryFolder();
+
+    @Test
+    public void languageSwitchIsViewerOwnedPersistedAndRefreshesLobbyItems() {
+        Fixture fixture = new Fixture();
+        final int[] refreshed = {0};
+        fixture.menu.setOnLanguageChanged(player -> refreshed[0]++);
+        fixture.menu.open(fixture.player);
+        Inventory old = fixture.top;
+        assertTrue(fixture.menu.handleClick(fixture.player, old, CosmeticSettingsMenu.LANGUAGE_SLOT));
+        assertEquals(PlayerLanguage.ENGLISH, fixture.preferences.getLanguage(fixture.id));
+        assertEquals(1, refreshed[0]);
+        assertSame(old, fixture.top);
+        fixture.menu.open(fixture.player);
+        assertFalse(fixture.menu.handleClick(fixture.player, old, CosmeticSettingsMenu.LANGUAGE_SLOT));
+        assertEquals(PlayerLanguage.ENGLISH, new PreferencesService(temporary.getRoot(), Logger.getAnonymousLogger()).getLanguage(fixture.id));
+        assertEquals(PlayerLanguage.JAPANESE, fixture.preferences.getLanguage(UUID.randomUUID()));
+        assertEquals(KillEffect.LIGHTNING, fixture.preferences.getKillEffect(fixture.id));
+    }
 
     @Test
     public void defaultAndAvailableEffectsHaveUniqueTopInventorySlots() {
