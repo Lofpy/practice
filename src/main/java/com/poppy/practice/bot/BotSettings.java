@@ -104,13 +104,21 @@ public final class BotSettings {
         return load(plugin.getConfig());
     }
 
-    /** Hard combat settings with fixed, forward/back combo spacing for certification. */
+    /** More accessible fixed opponent; ordinary practice-bot settings stay independent. */
     public static BotSettings certificationPreset() {
         YamlConfiguration isolated = new YamlConfiguration();
         BotSetting.resetAll(isolated);
         isolated.set("match.ender-pearl-cooldown-seconds", 16);
         isolated.set("bot.movement.strafe-input", 0.18D);
         isolated.set("bot.movement.retreat-distance", 2.35D);
+        isolated.set("bot.combat.minimum-cps", 10.0D);
+        isolated.set("bot.combat.maximum-cps", 13.0D);
+        isolated.set("bot.combat.attack-range", 2.8D);
+        isolated.set("bot.aim.maximum-yaw-change-per-tick", 32.4D);
+        isolated.set("bot.aim.maximum-pitch-change-per-tick", 24.3D);
+        isolated.set("bot.aim.prediction-ticks", 0.5D);
+        isolated.set("bot.aim.error-degrees", 0.8D);
+        isolated.set("bot.healing.cooldown-ticks", 24);
         return new BotSettings(isolated.getConfigurationSection("bot"), true);
     }
 

@@ -21,10 +21,14 @@ public final class PracticeSidebarTest {
         Board board = new Board();
         PracticeSidebar sidebar = new PracticeSidebar(board.scoreboard);
         sidebar.showLobby(1, PracticeSidebar.placementText(0), PracticeSidebar.placementText(0), PracticeSidebar.placementText(0));
-        assertEquals(ChatColor.RED.toString() + ChatColor.BOLD + "AscendingMC Practice", board.title);
+        assertEquals(ChatColor.RED.toString() + ChatColor.BOLD + "Practice", board.title);
         assertEquals(ChatColor.WHITE + "Your Ping: ", board.prefixes.get("self_ping"));
         assertEquals(ChatColor.WHITE + "Online: ", board.prefixes.get("online"));
         assertEquals(ChatColor.YELLOW + "Tier 0/3", board.suffixes.get("nodebuff_rating"));
+        sidebar.showMatch(20, 30);
+        assertEquals(ChatColor.RED.toString() + ChatColor.BOLD + "Practice", board.title);
+        sidebar.showBoxing(20, 30, 1, 2);
+        assertEquals(ChatColor.RED.toString() + ChatColor.BOLD + "Practice", board.title);
     }
 
     @Test

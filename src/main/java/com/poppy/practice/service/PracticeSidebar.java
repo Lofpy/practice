@@ -11,7 +11,7 @@ import org.bukkit.scoreboard.Team;
 /** One reusable sidebar; line values and visibility change only when necessary. */
 final class PracticeSidebar {
     private static final String TITLE = ChatColor.RED.toString()
-            + ChatColor.BOLD + "AscendingMC Practice";
+            + ChatColor.BOLD + "Practice";
     private final Scoreboard scoreboard;
     private final Objective objective;
     private final Line selfPing;

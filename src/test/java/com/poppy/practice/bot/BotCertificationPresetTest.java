@@ -20,21 +20,21 @@ public class BotCertificationPresetTest {
         assertFalse(practice.isCertificationMovement());
         assertTrue(placement.isCertificationMovement());
         assertEquals(1, practice.getMinimumCps(), 0);
-        assertEquals(16.8, placement.getMinimumCps(), 0);
-        assertEquals(19.2, placement.getMaximumCps(), 0);
+        assertEquals(10.0, placement.getMinimumCps(), 0);
+        assertEquals(13.0, placement.getMaximumCps(), 0);
         assertEquals(20, placement.getMaximumHealth(), 0);
         assertEquals(29, placement.getHealingPotionCount());
         assertTrue(placement.isStrafeEnabled());
-        assertEquals(3.0, placement.getAttackRange(), 0);
+        assertEquals(2.8, placement.getAttackRange(), 0);
         assertEquals(0, placement.getHealingRetreatBeforeThrowTicks());
         assertTrue(placement.canHealingPotionHealOpponent());
         global.set("bot.combat.minimum-cps", 20);
-        assertEquals(16.8, placement.getMinimumCps(), 0);
+        assertEquals(10.0, placement.getMinimumCps(), 0);
         assertNotSame(placement, BotSettings.certificationPreset());
     }
 
     @Test
-    public void certificationChangesSpacingWithoutChangingOrdinaryPracticeDefaults() {
+    public void certificationIsMoreForgivingWithoutChangingOrdinaryPracticeDefaults() {
         YamlConfiguration config = new YamlConfiguration();
         BotSetting.resetAll(config);
         BotSettings practice = BotSettings.load(config);
@@ -48,10 +48,23 @@ public class BotCertificationPresetTest {
         assertFalse(practice.isCertificationMovement());
         assertTrue(placement.isCertificationMovement());
         assertEquals(practice.getMaximumHealth(), placement.getMaximumHealth(), 0.0D);
-        assertEquals(practice.getMinimumCps(), placement.getMinimumCps(), 0.0D);
-        assertEquals(practice.getMaximumCps(), placement.getMaximumCps(), 0.0D);
-        assertEquals(practice.getAttackRange(), placement.getAttackRange(), 0.0D);
-        assertEquals(practice.getSwingRange(), placement.getSwingRange(), 0.0D);
+        assertEquals(16.8D, practice.getMinimumCps(), 0.0D);
+        assertEquals(19.2D, practice.getMaximumCps(), 0.0D);
+        assertEquals(3.0D, practice.getAttackRange(), 0.0D);
+        assertTrue(placement.getMinimumCps() < practice.getMinimumCps());
+        assertTrue(placement.getMaximumCps() < practice.getMaximumCps());
+        assertTrue(placement.getAttackRange() < practice.getAttackRange());
+        assertEquals(placement.getAttackRange() + 1.0D, placement.getSwingRange(), 0.0D);
+        assertEquals(32.4D, placement.getMaximumYawChange(), 0.0D);
+        assertEquals(24.3D, placement.getMaximumPitchChange(), 0.0D);
+        assertEquals(0.5D, placement.getPredictionTicks(), 0.0D);
+        assertEquals(0.8D, placement.getAimErrorDegrees(), 0.0D);
+        assertTrue(placement.getMaximumYawChange() < practice.getMaximumYawChange());
+        assertTrue(placement.getMaximumPitchChange() < practice.getMaximumPitchChange());
+        assertTrue(placement.getPredictionTicks() < practice.getPredictionTicks());
+        assertTrue(placement.getAimErrorDegrees() > practice.getAimErrorDegrees());
+        assertEquals(24, placement.getHealingCooldownTicks());
+        assertTrue(placement.getHealingCooldownTicks() > practice.getHealingCooldownTicks());
         assertEquals(practice.getSprintResetTicks(), placement.getSprintResetTicks());
         assertEquals(practice.getHealingPotionCount(), placement.getHealingPotionCount());
         assertEquals(practice.getHealingHealth(), placement.getHealingHealth(), 0.0D);

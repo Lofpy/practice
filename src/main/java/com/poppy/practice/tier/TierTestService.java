@@ -84,6 +84,10 @@ public final class TierTestService {
             int count = ratings.getPlacementCount(match.getPlayerId(), match.getKitId());
             player.sendMessage(ChatColor.RED + language(player).choose("認定 [", "Certification [") + match.getKitId() + "] "
                     + count + language(player).choose("/3 | スコア: ", "/3 | Score: ") + number(assessment.getScore()) + "/100");
+            player.sendMessage(ChatColor.DARK_GRAY + language(player).choose("採点補正: ", "Calibration: ")
+                    + number(assessment.getRawScore()) + " → " + number(assessment.getScore())
+                    + " (x" + String.format(Locale.ROOT, "%.2f", TierAssessment.SCORE_MULTIPLIER)
+                    + language(player).choose(", 上限100)", ", max100)"));
             for (Map.Entry<String, Double> metric : assessment.getMetrics().entrySet()) {
                 player.sendMessage(ChatColor.GRAY + "  " + metricName(language(player), metric.getKey()) + ": "
                         + ChatColor.WHITE + number(metric.getValue()) + "%");
@@ -114,6 +118,8 @@ public final class TierTestService {
         yaml.set("duration-seconds", result.getDurationSeconds());
         yaml.set("won", match.getPlayerId().equals(result.getWinnerId()));
         yaml.set("score", assessment.getScore());
+        yaml.set("raw-score", assessment.getRawScore());
+        yaml.set("calibration-multiplier", TierAssessment.SCORE_MULTIPLIER);
         for (Map.Entry<String, Double> metric : assessment.getMetrics().entrySet()) {
             String path = metric.getKey().toLowerCase(Locale.ROOT).replace(' ', '-');
             yaml.set("metrics." + path + ".percent", metric.getValue());

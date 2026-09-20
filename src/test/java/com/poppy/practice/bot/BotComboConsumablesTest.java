@@ -182,16 +182,20 @@ public class BotComboConsumablesTest {
     }
 
     @Test
-    public void nativeCarrotUseConsumesOnlyExistingFoodWhenHungry() {
+    public void hungerNeverStartsCarrotUseOrConsumesFood() {
         Fixture fixture = new Fixture();
         ItemStack carrots = new ItemStack(Items.GOLDEN_CARROT, 64);
         fixture.bot.inventory.setItem(8, carrots);
         when(fixture.player.getFoodLevel()).thenReturn(12);
 
-        assertTrue(fixture.consumables.tick());
+        for (int tick = 0; tick < 100; tick++) {
+            assertFalse(fixture.consumables.tick());
+        }
 
-        assertEquals(8, fixture.bot.inventory.itemInHandIndex);
-        verify(fixture.bot).a(carrots, 32);
+        assertFalse(fixture.consumables.isEating());
+        assertEquals(0, fixture.bot.inventory.itemInHandIndex);
+        verify(fixture.bot, never()).a(any(ItemStack.class), anyInt());
+        assertSame(carrots, fixture.bot.inventory.getItem(8));
         assertEquals(64, carrots.count);
         assertNull(fixture.bot.inventory.getItem(2));
     }

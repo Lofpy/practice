@@ -10,6 +10,7 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.util.UUID;
 import java.util.logging.Logger;
 
@@ -52,11 +53,85 @@ public class TierTestServiceTest {
                 + "/nodebuff/" + match.getId() + ".yml");
         YamlConfiguration yaml = YamlConfiguration.loadConfiguration(audit);
         assertEquals(TierAssessment.MODEL_VERSION, yaml.getString("model"));
+        assertEquals("fixed-balanced-v2", yaml.getString("model"));
+        assertEquals(80.0, yaml.getDouble("raw-score"), .000001);
+        assertEquals(1.2, yaml.getDouble("calibration-multiplier"), 0.0);
+        assertEquals(96.0, yaml.getDouble("score"), .000001);
         assertEquals(50, yaml.getDouble("metrics.potion-accuracy.percent"), 0);
         assertEquals(20, yaml.getDouble("metrics.potion-accuracy.weight"), 0);
         assertEquals(2, yaml.getDouble("player.opponent-healed-hp"), 0);
         assertEquals(1, yaml.getInt("player.potions-missed"));
         assertEquals(1, ratings.getPlacementCount(match.getPlayerId(), "nodebuff"));
+    }
+
+    @Test
+    public void calibratedPlacementsStillUnlockAtThreeAndKeepInitialEloBoundsInEveryKit() throws Exception {
+        File folder = temporary.newFolder();
+        RatingService ratings = new RatingService(folder, logger);
+        TierTestService service = new TierTestService(folder, ratings, logger);
+        for (String kit : new String[] {"nodebuff", "boxing", "combo"}) {
+            UUID weakest = UUID.randomUUID();
+            UUID strongest = UUID.randomUUID();
+            for (int i = 0; i < 3; i++) {
+                BotMatch lost = new BotMatch(weakest, UUID.randomUUID(), kit, "arena", true);
+                lost.markFighting();
+                lost.getStats(lost.getBotEntityId()).recordMeleeHit(false);
+                lost.beginEnding();
+                MatchResult loss = new MatchResult(lost.getBotEntityId(),
+                        MatchParticipantSnapshot.capture(weakest, "Player", null, lost.getStats(weakest)),
+                        MatchParticipantSnapshot.capture(lost.getBotEntityId(), "Bot", null,
+                                lost.getStats(lost.getBotEntityId())), 60);
+                assertTrue(service.complete(lost, loss, null));
+                BotMatch won = completed(strongest, kit, true);
+                assertTrue(service.complete(won, result(won), null));
+                assertEquals(i == 2, ratings.isQualified(weakest, kit));
+                assertEquals(i == 2, ratings.isQualified(strongest, kit));
+                assertEquals(i < 2 ? 0L : 1500000L, ratings.getRatingMilli(weakest, kit));
+                assertEquals(i < 2 ? 0L : 1800000L, ratings.getRatingMilli(strongest, kit));
+            }
+        }
+    }
+
+    @Test
+    public void previousCertificationScoresRatingsAndAuditFilesAreNotRecalculated() throws Exception {
+        File folder = temporary.newFolder();
+        RatingService ratings = new RatingService(folder, logger);
+        UUID completedPlayer = UUID.randomUUID();
+        UUID partialPlayer = UUID.randomUUID();
+        for (int i = 0; i < 3; i++) {
+            assertTrue(ratings.recordPlacement(completedPlayer, "boxing", UUID.randomUUID(), 50.0));
+            if (i < 2) {
+                assertTrue(ratings.recordPlacement(partialPlayer, "boxing", UUID.randomUUID(), 50.0));
+            }
+        }
+        File oldAuditDirectory = new File(folder, "tier-assessments/" + partialPlayer + "/boxing");
+        assertTrue(oldAuditDirectory.mkdirs());
+        File oldAudit = new File(oldAuditDirectory, UUID.randomUUID() + ".yml");
+        YamlConfiguration original = new YamlConfiguration();
+        original.set("model", "fixed-hard-v1");
+        original.set("score", 50.0);
+        original.save(oldAudit);
+        byte[] originalAuditBytes = Files.readAllBytes(oldAudit.toPath());
+        File ratingsFile = new File(folder, "ratings.yml");
+        byte[] originalRatingBytes = Files.readAllBytes(ratingsFile.toPath());
+
+        RatingService reloaded = new RatingService(folder, logger);
+        TierTestService service = new TierTestService(folder, reloaded, logger);
+        assertEquals(50.0, reloaded.getPlacementAverage(completedPlayer, "boxing"), 0.0);
+        assertEquals(1650000L, reloaded.getRatingMilli(completedPlayer, "boxing"));
+        BotMatch alreadyQualified = completed(completedPlayer, "boxing", true);
+        assertFalse(service.complete(alreadyQualified, result(alreadyQualified), null));
+        assertArrayEquals(originalRatingBytes, Files.readAllBytes(ratingsFile.toPath()));
+
+        BotMatch third = completed(partialPlayer, "boxing", true);
+        assertTrue(service.complete(third, result(third), null));
+        assertEquals(3, reloaded.getPlacementCount(partialPlayer, "boxing"));
+        assertEquals((50.0 + 50.0 + 100.0) / 3.0,
+                reloaded.getPlacementAverage(partialPlayer, "boxing"), .000001);
+        assertEquals(1700000L, reloaded.getRatingMilli(partialPlayer, "boxing"));
+        assertEquals(1650000L, reloaded.getRatingMilli(completedPlayer, "boxing"));
+        assertArrayEquals(originalAuditBytes, Files.readAllBytes(oldAudit.toPath()));
+        assertEquals("fixed-hard-v1", YamlConfiguration.loadConfiguration(oldAudit).getString("model"));
     }
 
     @Test
