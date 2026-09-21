@@ -7,8 +7,8 @@ x-runtime: &runtime
   cap_drop: [ALL]
   security_opt: [no-new-privileges:true]
   tmpfs:
-    - /tmp:rw,nosuid,nodev,size=256m,mode=1777
-    - /run/poppy:rw,nosuid,nodev,size=1m,uid=10001,gid=10001
+    - /tmp:rw,nosuid,nodev,noexec,size=256m,mode=1777
+    - /run/poppy:rw,nosuid,nodev,noexec,size=1m,uid=10001,gid=10001
   # Routine deployments use runtime.py stop and wait, NOT Docker's timed kill.
   stop_grace_period: 5m
   healthcheck:

@@ -14,6 +14,7 @@ import threading
 
 CONTROL = Path("/run/poppy/control.sock")
 READY = Path("/run/poppy/ready")
+STARTUP_ERROR = Path("/run/poppy/startup-error")
 KIND = os.environ.get("SERVER_KIND", "")
 PORT = int(os.environ.get("SERVER_PORT", "0"))
 PLUGIN_SOURCE = Path("/opt/poppy/plugins")
@@ -245,15 +246,56 @@ def command(text):
         assert sock.recv(16) == b"OK"
 
 
+def java_args(kind, memory):
+    assert re.fullmatch(r"[1-9][0-9]*[MG]", memory)
+    args = ["java", "-Xms256M", "-Xmx" + memory, "-XX:+UseG1GC"]
+    if kind == "survival":
+        # JNA's default extraction into /tmp cannot load executable pages on a
+        # noexec mount. Use the exact bundled library, installed at image build
+        # time under the read-only root, with no system/unpack fallback.
+        args.extend(["-Djna.boot.library.path=/opt/poppy/native",
+                     "-Djna.nounpack=true", "-Djna.nosys=true"])
+    args.extend(["-jar", "/opt/poppy/server.jar"])
+    if kind != "proxy":
+        args.append("nogui")
+    return args
+
+
+class StartupReadiness:
+    def __init__(self, required):
+        self.required = set(required)
+        self.seen = set()
+        self.failed = False
+
+    def observe(self, line):
+        if "ERROR" in line or "SEVERE" in line or "Exception" in line:
+            if not self.failed:
+                # Preserve the first cause rather than only reporting a missing
+                # readiness marker after the host's startup deadline expires.
+                STARTUP_ERROR.write_text(line.strip()[:2000] + "\n", encoding="utf-8")
+            self.failed = True
+            READY.unlink(missing_ok=True)
+        for message in self.required:
+            if message in line:
+                self.seen.add(message)
+        if "Done (" in line and not self.failed and self.seen == self.required:
+            READY.touch()
+
+
+def health():
+    if STARTUP_ERROR.exists():
+        raise RuntimeError("Startup/plugins not ready; first startup error: "
+                           + STARTUP_ERROR.read_text(encoding="utf-8").strip())
+    assert READY.exists(), "Startup/plugins not ready"
+    status_ping(PORT, SURVIVAL_PROTOCOL if KIND == "survival" else None)
+
+
 def run():
     READY.unlink(missing_ok=True)
+    STARTUP_ERROR.unlink(missing_ok=True)
     CONTROL.unlink(missing_ok=True)
     initialize()
-    memory = os.environ["JAVA_MEMORY"]
-    assert re.fullmatch(r"[1-9][0-9]*[MG]", memory)
-    args = ["java", "-Xms256M", "-Xmx" + memory, "-XX:+UseG1GC", "-jar", "/opt/poppy/server.jar"]
-    if KIND != "proxy":
-        args.append("nogui")
+    args = java_args(KIND, os.environ["JAVA_MEMORY"])
     child = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT, text=True, bufsize=1)
     guard = threading.Lock()
@@ -286,18 +328,10 @@ def run():
                 "lobby": ["Standalone lobby enabled."],
                 "survival": ["AscendingSurvival 0.1.0 enabled."],
                 "proxy": ["AscendingNetwork enabled: Survival requires Minecraft 26.3 (protocol 777)"]}[KIND]
-    seen = set()
-    failed = False
+    readiness = StartupReadiness(required)
     for line in child.stdout:
         print(line, end="", flush=True)
-        if "ERROR" in line or "SEVERE" in line or "Exception" in line:
-            failed = True
-            READY.unlink(missing_ok=True)
-        for message in required:
-            if message in line:
-                seen.add(message)
-        if "Done (" in line and not failed and len(seen) == len(required):
-            READY.touch()
+        readiness.observe(line)
     result = child.wait()
     READY.unlink(missing_ok=True)
     return result
@@ -307,8 +341,7 @@ if __name__ == "__main__":
     if sys.argv[1:] == ["run"]:
         sys.exit(run())
     elif sys.argv[1:] == ["health"]:
-        assert READY.exists(), "Startup/plugins not ready"
-        status_ping(PORT, SURVIVAL_PROTOCOL if KIND == "survival" else None)
+        health()
     elif sys.argv[1:] == ["stop"]:
         command("end" if KIND == "proxy" else "stop")
     else:

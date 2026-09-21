@@ -60,6 +60,14 @@ jobs:
           service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
       - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
+      - name: Verify real Survival startup using existing operator EULA acceptance
+        run: |
+          set -euo pipefail
+          eula_file="$PWD/.build/operator-eula.txt"
+          trap 'rm -f "$eula_file"' EXIT
+          gcloud compute ssh "$VM_NAME" --project "$PROJECT_ID" --zone "$VM_ZONE" --tunnel-through-iap \
+            --command "sudo cat /srv/poppy/state/pvp/eula.txt" > "$eula_file"
+          bash deploy/smoke-survival.sh "$IMAGE_BASE" "$RELEASE_ID" "$eula_file"
       - name: Publish digest-addressed release
         run: |
           set -euo pipefail
@@ -84,7 +92,12 @@ jobs:
       - name: Run independent host-side transaction
         run: |
           set -euo pipefail
-          gcloud compute ssh "$VM_NAME" --project "$PROJECT_ID" --zone "$VM_ZONE" --tunnel-through-iap --command "sudo install -d -m 700 /opt/poppy/incoming/$RELEASE_ID && sudo cp poppy-$RELEASE_ID/* /opt/poppy/incoming/$RELEASE_ID/ && sudo chown -R root:root /opt/poppy/incoming/$RELEASE_ID && sudo install -m 755 /opt/poppy/incoming/$RELEASE_ID/deploy.py /opt/poppy/deploy.py && sudo systemctl start poppy-network && sudo systemd-run --unit=poppy-deploy-$RELEASE_ID --wait --collect /usr/bin/python3 /opt/poppy/deploy.py deploy /opt/poppy/incoming/$RELEASE_ID"
+          gcloud compute ssh "$VM_NAME" --project "$PROJECT_ID" --zone "$VM_ZONE" --tunnel-through-iap --command "sudo install -d -m 700 /opt/poppy/incoming/$RELEASE_ID && sudo cp poppy-$RELEASE_ID/* /opt/poppy/incoming/$RELEASE_ID/ && sudo chown -R root:root /opt/poppy/incoming/$RELEASE_ID && sudo install -m 755 /opt/poppy/incoming/$RELEASE_ID/deploy.py /opt/poppy/deploy.py && sudo systemctl start poppy-network && sudo systemd-run --unit=poppy-deploy-$RELEASE_ID --wait --collect /usr/bin/python3 /opt/poppy/deploy.py deploy /opt/poppy/incoming/$RELEASE_ID" || {
+            transaction_status=$?
+            gcloud compute ssh "$VM_NAME" --project "$PROJECT_ID" --zone "$VM_ZONE" --tunnel-through-iap \
+              --command "sudo journalctl --no-pager -u poppy-deploy-$RELEASE_ID -n 120" || true
+            exit "$transaction_status"
+          }
       - name: Keep release manifest
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -93,3 +106,11 @@ jobs:
           path: bundle/
           if-no-files-found: warn
           retention-days: 30
+      - name: Keep runtime smoke evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: production-runtime-smoke-evidence
+          path: .build/*.log
+          if-no-files-found: warn
+          retention-days: 14
