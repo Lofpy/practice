@@ -18,6 +18,20 @@ COPY proxy-plugin proxy-plugin
 RUN mvn --batch-mode -f survival-plugin/pom.xml verify \
  && mvn --batch-mode -f proxy-plugin/pom.xml verify
 
+# Materialize Paper's pinned dependency patches, but never run Minecraft or
+# accept its EULA. Native code belongs to the root-owned immutable image layer.
+FROM ${MODERN_BUILD_JAVA} AS survival-native-build
+RUN apt-get update && apt-get install -y --no-install-recommends python3 \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /paper-bootstrap
+COPY .build/paper.jar /paper.jar
+COPY deploy/native-libraries.py deploy/NativeStartupProbe.java /src/
+RUN java -Dpaperclip.patchonly=true -jar /paper.jar \
+ && python3 /src/native-libraries.py install --paper /paper.jar \
+      --libraries /paper-bootstrap/libraries --output /opt/poppy/native \
+ && javac -cp '/opt/poppy/native/probe-libs/*' \
+      -d /opt/poppy/native/probe /src/NativeStartupProbe.java
+
 FROM ${BACKEND_JAVA} AS backend
 RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-yaml python3-toml \
  && rm -rf /var/lib/apt/lists/* \
@@ -64,11 +78,13 @@ ENTRYPOINT ["poppy-entrypoint"]
 
 # Survival is intentionally independent from the legacy WindSpigot/Via backends.
 FROM ${PROXY_JAVA} AS survival
-RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-yaml python3-toml \
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-yaml python3-toml libudev1 \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /opt/poppy/defaults /opt/poppy/plugins /data /run/poppy \
  && chown -R 10001:10001 /data /run/poppy
 COPY .build/paper.jar /opt/poppy/server.jar
+COPY --from=survival-native-build /opt/poppy/native /opt/poppy/native
+COPY deploy/native-libraries.py /opt/poppy/native-libraries.py
 COPY --from=modern-build /src/survival-plugin/target/AscendingSurvival-0.1.0.jar /opt/poppy/plugins/AscendingSurvival.jar
 COPY network-template/survival/server.properties network-template/survival/spigot.yml /opt/poppy/defaults/
 COPY network-template/survival/config/paper-global.yml /opt/poppy/defaults/config/paper-global.yml

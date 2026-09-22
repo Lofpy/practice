@@ -189,7 +189,17 @@ VMのSAへ新しい権限を追加して回避せず、既存の対象バケッ�
 
 CIはTerraformの構文/プロバイダ検証、Java8のPractice/LobbyとJava25のSurvival/ProxyのMavenテスト、デプロイ異常系、
 4イメージのbuild、非root/entrypoint、EULA未同意時の拒否、Velocityの実起動/ゲート初期化/status/正常終了を検査する。
-CIではMinecraft EULAに同意せず、実バックエンドのworld/plugin起動は行わない。
+PRのCIではMinecraft EULAに同意せず、実バックエンドのworld/plugin起動は行わない。
+ただし、本番と同じread-only・非root・`/tmp`の`noexec`条件で、Paperに同梱されたJNA/OSHIの実ロードを検査する。
+JNAはビルド時に同梱JARのハッシュを検証して`/opt/poppy/native`へ取り出す。
+実行時の書込可能領域への展開やシステムライブラリへのフォールバックを禁止し、読み取り専用のライブラリを使う。
+起動判定はエラーを無視せず、最初のエラーをreadiness失敗理由に含める。
+
+承認済みの本番デプロイでは、既存の`/srv/poppy/state/pvp/eula.txt`を読み取り専用で取得し、
+内容をそのまま隔離Survivalコンテナへコピーする。未同意・欠落なら中止し、同意は自動生成しない。
+公開ポートのない独立ネットワーク内で、新規ワールド・プラグイン有効化・protocol777・通常停止を確認する。
+この検証が通るまでイメージ公開・本番の停止/データ変更へ進まない。起動期限は本番と同じ240秒。
+強制終了で正常停止確認を代替せず、結果は`production-runtime-smoke-evidence`へ保存する。
 
 初回構築ではplan、IAP/OS Login/WIF、GCS転送、実ディスク、Java17の旧バックエンド、
 Java25のSurvival、実クライアントのlobby↔pvp/lobby↔survival、旧版のSurvival拒否、レート/KB保持、
