@@ -261,6 +261,21 @@ def java_args(kind, memory):
     return args
 
 
+def regenerate_offline_worlds(kind, data=Path("/data")):
+    """Apply staged Survival requests before Paper can open any world files."""
+    if kind != "survival":
+        return
+    args = ["java", "-cp", str(data / "plugins/AscendingSurvival.jar"),
+            "com.ascendingmc.survival.OfflineWorldRegenerator", str(data)]
+    try:
+        # Inherit output so archive/recovery diagnostics remain in container logs.
+        subprocess.run(args, cwd=data, check=True)
+    except (OSError, subprocess.CalledProcessError) as error:
+        STARTUP_ERROR.write_text("Offline Survival world regeneration failed: "
+                                 + str(error)[:1800] + "\n", encoding="utf-8")
+        raise
+
+
 class StartupReadiness:
     def __init__(self, required):
         self.required = set(required)
@@ -295,6 +310,7 @@ def run():
     STARTUP_ERROR.unlink(missing_ok=True)
     CONTROL.unlink(missing_ok=True)
     initialize()
+    regenerate_offline_worlds(KIND)
     args = java_args(KIND, os.environ["JAVA_MEMORY"])
     child = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT, text=True, bufsize=1)

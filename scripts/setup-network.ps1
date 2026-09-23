@@ -74,8 +74,11 @@ foreach ($name in @('ViaVersion.jar', 'ViaBackwards.jar', 'ViaRewind.jar')) {
         Install-Managed (Join-Path $cacheRoot $name) (Join-Path $repoRoot "runtime\plugins\$name") "pvp\plugins\$name"
     }
 }
-foreach ($name in @('server.properties', 'spigot.yml', 'start.ps1', 'run.bat')) {
+foreach ($name in @('server.properties', 'spigot.yml')) {
     Copy-Missing (Join-Path $templateRoot "survival\$name") (Join-Path $survivalRoot $name)
+}
+foreach ($name in @('start.ps1', 'run.bat')) {
+    Install-Managed (Join-Path $templateRoot "survival\$name") (Join-Path $survivalRoot $name) "survival\$name"
 }
 Copy-Missing (Join-Path $templateRoot 'survival\config\paper-global.yml') (Join-Path $survivalRoot 'config\paper-global.yml')
 Copy-Missing (Join-Path $repoRoot 'proxy-plugin\src\main\resources\config.properties') (Join-Path $proxyRoot 'plugins\ascending-network\config.properties')
