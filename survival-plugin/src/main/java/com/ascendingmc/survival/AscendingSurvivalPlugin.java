@@ -51,6 +51,7 @@ public final class AscendingSurvivalPlugin extends JavaPlugin implements Listene
     private YamlConfiguration registry;
     private Path registryFile;
     private DeletionConfirmations confirmations;
+    private RegenerationCommands regeneration;
     private NamespacedKey editModeKey;
     private String primaryName;
     private byte[] hubMessage;
@@ -79,12 +80,17 @@ public final class AscendingSurvivalPlugin extends JavaPlugin implements Listene
                     getConfig().getLong("world-management.confirmation-seconds", 30)));
             confirmations = new DeletionConfirmations(System::currentTimeMillis, lifetime * 1000);
             loadManagedWorlds();
+            regeneration = new RegenerationCommands(this, primaryName,
+                    () -> worldNames().stream().map(Bukkit::getWorld).filter(Objects::nonNull).toList(),
+                    lifetime * 1000);
             for (World world : Bukkit.getWorlds()) applySettings(world);
             Objects.requireNonNull(getCommand("sworld")).setExecutor(this);
             Objects.requireNonNull(getCommand("sworld")).setTabCompleter(this);
             Objects.requireNonNull(getCommand("hub")).setExecutor(this);
             getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
             getServer().getPluginManager().registerEvents(this, this);
+            getServer().getPluginManager().registerEvents(
+                    new RegeneratedWorldSafety(this, primary, getDataFolder().toPath()), this);
             if (getConfig().getBoolean("scoreboard.enabled", true)) {
                 long period = Math.max(2, Math.min(200, getConfig().getLong("scoreboard.update-ticks", 2)));
                 sidebarTask = getServer().getScheduler().runTaskTimer(this, this::updateSidebars, 1, period);
@@ -125,6 +131,7 @@ public final class AscendingSurvivalPlugin extends JavaPlugin implements Listene
         sidebars.remove(player.getUniqueId());
         lastHub.remove(player.getUniqueId());
         confirmations.forget(player.getUniqueId().toString());
+        regeneration.forget(player);
     }
 
     private void updateSidebars() {
@@ -166,6 +173,9 @@ public final class AscendingSurvivalPlugin extends JavaPlugin implements Listene
             return true;
         }
         try {
+            if (List.of("create", "delete", "confirm", "restore").contains(args[0].toLowerCase(Locale.ROOT))) {
+                regeneration.requireNoPending();
+            }
             switch (args[0].toLowerCase(Locale.ROOT)) {
                 case "list" -> list(sender);
                 case "create" -> create(sender, args);
@@ -175,6 +185,7 @@ public final class AscendingSurvivalPlugin extends JavaPlugin implements Listene
                 case "delete" -> requestDelete(sender, args);
                 case "confirm" -> confirmDelete(sender, args);
                 case "restore" -> restore(sender, args);
+                case "regenerate", "regen" -> regeneration.execute(sender, args);
                 default -> help(sender);
             }
         } catch (IllegalArgumentException invalid) {
@@ -191,6 +202,7 @@ public final class AscendingSurvivalPlugin extends JavaPlugin implements Listene
         message(sender, "/sworld set <name> <difficulty|pvp|time|weather|spawn|border|gamerule> [value]");
         message(sender, "/sworld edit [on|off] | delete <name> | confirm <token> | restore <name>");
         message(sender, "削除はアーカイブへ移動します。初期ワールド・Nether・Endは削除できません。");
+        RegenerationCommands.help(sender);
     }
 
     private void list(CommandSender sender) {
@@ -566,7 +578,11 @@ public final class AscendingSurvivalPlugin extends JavaPlugin implements Listene
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (!sender.hasPermission(PERMISSION) || !command.getName().equalsIgnoreCase("sworld")) return List.of();
         List<String> options = List.of();
-        if (args.length == 1) options = List.of("list", "create", "tp", "set", "edit", "delete", "confirm", "restore");
+        if (args.length == 1) options = List.of("list", "create", "tp", "set", "edit", "delete", "confirm", "restore", "regenerate");
+        else if (args.length == 2 && List.of("regenerate", "regen").contains(args[0].toLowerCase(Locale.ROOT))) {
+            options = new ArrayList<>(List.of("all", "confirm", "status", "cancel", "restore"));
+            options.addAll(worldNames());
+        }
         else if (args.length == 2 && List.of("tp", "set", "delete", "restore").contains(args[0].toLowerCase(Locale.ROOT))) options = worldNames();
         else if (args.length == 2 && args[0].equalsIgnoreCase("edit")) options = List.of("on", "off");
         else if (args.length == 3 && args[0].equalsIgnoreCase("create")) options = List.of("normal", "nether", "end");

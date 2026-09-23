@@ -23,4 +23,29 @@ public final class SidebarTextTest {
         assertTrue(lines.contains("§fZ: §c-101"));
         assertTrue(lines.contains("§fPing: §c0 ms"));
     }
+
+    @Test public void separatorsUseApproximatelyTwoThirdsOfPreviousWidth() {
+        List<String> lines = SidebarText.lines(7, 42, 12.3, 65.9, 234.5);
+        String top = visibleText(lines.getFirst());
+        String bottom = visibleText(lines.getLast());
+        assertEquals("─────────────", top);
+        assertEquals(top, bottom);
+        assertEquals(0.66, top.length() / 20.0, 0.02);
+        assertEquals(8, lines.size());
+        assertEquals(lines.size(), new HashSet<>(lines).size());
+    }
+
+    @Test public void compactLayoutPreservesLargePositiveAndNegativeCoordinates() {
+        List<String> lines = SidebarText.lines(1000, 9999, 29999999.9, -64.1, -29999999.1);
+        assertTrue(lines.contains("§fOnline: §c1000"));
+        assertTrue(lines.contains("§fPing: §c9999 ms"));
+        assertTrue(lines.contains("§fX: §c29999999"));
+        assertTrue(lines.contains("§fY: §c-65"));
+        assertTrue(lines.contains("§fZ: §c-30000000"));
+        assertTrue(lines.stream().map(SidebarTextTest::visibleText).allMatch(line -> line.length() <= 13));
+    }
+
+    private static String visibleText(String line) {
+        return line.replaceAll("§.", "");
+    }
 }

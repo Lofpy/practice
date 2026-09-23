@@ -13,5 +13,5 @@ commands:
     aliases: [lobby]
 permissions:
   ascending.survival.admin:
-    description: Create, configure, edit, archive and restore Survival worlds
+    description: Create, configure, edit, archive, regenerate and restore Survival worlds
     default: op

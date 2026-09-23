@@ -11,8 +11,14 @@ if (-not (Test-Path -LiteralPath $survivalEula) -or
     (Get-Content -LiteralPath $survivalEula -Raw) -notmatch '(?m)^eula=true\s*$') {
     throw 'Operator EULA acceptance required. This script never accepts terms automatically.'
 }
+$survivalPlugin = Join-Path $PSScriptRoot 'plugins\AscendingSurvival.jar'
+if (-not (Test-Path -LiteralPath $survivalPlugin -PathType Leaf)) {
+    throw 'Managed AscendingSurvival.jar is missing. Run scripts/setup-network.ps1 before starting.'
+}
 Push-Location -LiteralPath $PSScriptRoot
 try {
+    & $survivalJava.FullName '-Dfile.encoding=UTF-8' '-cp' $survivalPlugin 'com.ascendingmc.survival.OfflineWorldRegenerator' $PSScriptRoot
+    if ($LASTEXITCODE -ne 0) { throw "Offline world regeneration failed with code $LASTEXITCODE. Paper was not started." }
     & $survivalJava.FullName '-Dfile.encoding=UTF-8' -Xms256M "-Xmx$MaximumMemory" -XX:+UseG1GC -jar paper.jar nogui
     if ($LASTEXITCODE -ne 0) { throw "Survival exited with code $LASTEXITCODE" }
 } finally { Pop-Location }
